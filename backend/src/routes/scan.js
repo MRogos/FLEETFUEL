@@ -76,7 +76,7 @@ async function getDieselPriceViaSearch(country) {
         'Content-Type': 'application/json',
         'x-api-key': process.env.ANTHROPIC_API_KEY,
         'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'interleaved-thinking-2025-01-01',
+        'anthropic-beta': 'web-search-2025-03-05',
       },
       body: JSON.stringify({
         model: 'claude-opus-4-5',
@@ -90,16 +90,24 @@ async function getDieselPriceViaSearch(country) {
     });
 
     const data = await response.json();
-    const textBlock = data.content && data.content.find(b => b.type === 'text');
-    if (textBlock) {
-      const price = parseFloat(textBlock.text.trim().replace(',', '.'));
-      if (!isNaN(price) && price > 0.5 && price < 5) {
+    console.log('Web search response:', JSON.stringify(data).slice(0, 500));
+    // Zbierz wszystkie bloki tekstowe
+    const texts = (data.content || [])
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join(' ');
+    // Szukaj liczby w formacie ceny (1.xx lub 1,xx)
+    const match = texts.match(/\b([12][\.\,]\d{2,3})\b/);
+    if (match) {
+      const price = parseFloat(match[1].replace(',', '.'));
+      if (!isNaN(price) && price > 0.8 && price < 3.5) {
         return {
           price,
-          source: `Aktualna cena rynkowa ${country} (web search)`,
+          source: `Cena rynkowa ${country} (web search)`,
         };
       }
     }
+    console.log('Nie znaleziono ceny w:', texts.slice(0, 200));
     return null;
   } catch {
     return null;
