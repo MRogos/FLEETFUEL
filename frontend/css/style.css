@@ -1,18 +1,18 @@
 :root {
-  --bg: #0a0c0f;
-  --bg2: #111318;
-  --bg3: #181c22;
-  --border: #232830;
-  --border2: #2e3540;
+  --bg: #050608;
+  --bg2: #0a0d10;
+  --bg3: #111518;
+  --border: #1a2028;
+  --border2: #243040;
   --text: #e8edf3;
   --text2: #8a95a3;
   --text3: #4a5568;
-  --accent: #f0a500;
-  --accent2: #e06c00;
+  --accent: #00d4c8;
+  --accent2: #00a89e;
   --green: #2ecc71;
   --red: #e74c3c;
   --blue: #3498db;
-  --mono: 'Space Mono', monospace;
+  --mono: 'Share Tech Mono', monospace;
   --sans: 'Syne', sans-serif;
 }
 
