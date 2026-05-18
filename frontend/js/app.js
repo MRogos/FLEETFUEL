@@ -563,7 +563,6 @@ document.getElementById('btn-analyze').addEventListener('click', async () => {
   if (!scanFiles.length) return;
   document.getElementById('scan-analyzing').classList.add('show');
   document.getElementById('scan-result').classList.remove('show');
-  document.getElementById('scan-tankpool').checked = false;
   document.getElementById('btn-analyze').disabled = true;
 
   try {
@@ -571,7 +570,8 @@ document.getElementById('btn-analyze').addEventListener('click', async () => {
     const fd = new FormData();
     scanFiles.forEach(f => fd.append('images', f));
     fd.append('country', country);
-    fd.append('use_tankpool', document.getElementById('scan-tankpool').checked ? 'true' : 'false');
+    const useTankpool = document.getElementById('scan-tankpool').checked;
+    fd.append('use_tankpool', useTankpool ? 'true' : 'false');
     const res = await fetch('/api/scan', { method: 'POST', body: fd });
     const json = await res.json();
     scannedData = json.data || {};
