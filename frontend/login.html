@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FleetFuel</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0c0f;--bg2:#111318;--bg3:#181c22;--border:#232830;--border2:#2e3540;--text:#e8edf3;--text2:#8a95a3;--text3:#4a5568;--accent:#f0a500;--accent2:#e06c00;--red:#e74c3c;--mono:'Space Mono',monospace;--sans:'Syne',sans-serif}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:48px 48px;opacity:0.4;pointer-events:none}
+body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 60% 60% at 50% 50%,transparent 40%,var(--bg) 100%);pointer-events:none}
+.wrap{position:relative;z-index:1;width:100%;max-width:380px;padding:24px}
+.logo{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:40px}
+.logo-icon{width:44px;height:44px;background:var(--accent);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px}
+.logo-text{font-size:28px;font-weight:800;letter-spacing:-0.5px}
+.logo-text span{color:var(--accent)}
+.card{background:var(--bg2);border:1px solid var(--border2);border-radius:14px;padding:32px}
+.card-title{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:24px;text-align:center}
+label{display:block;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:7px}
+input[type=password]{width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:15px;padding:12px 14px;border-radius:8px;outline:none;transition:border-color .15s;letter-spacing:3px}
+input[type=password]:focus{border-color:var(--accent)}
+.btn{width:100%;background:var(--accent);color:#000;border:none;font-family:var(--sans);font-weight:800;font-size:14px;padding:13px;border-radius:8px;cursor:pointer;transition:background .15s;margin-top:12px}
+.btn:hover{background:var(--accent2)}
+.error{background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.3);color:var(--red);font-size:12px;font-weight:600;padding:10px 14px;border-radius:7px;margin-bottom:16px;display:none;text-align:center}
+.error.show{display:block}
+.note{text-align:center;font-family:var(--mono);font-size:10px;color:var(--text3);margin-top:24px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo">
+    <div class="logo-icon">&#9981;</div>
+    <div class="logo-text">Fleet<span>Fuel</span></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Wpisz has&#322;o dost&#281;pu</div>
+    <div class="error" id="err">Nieprawid&#322;owe has&#322;o</div>
+    <label for="pwd">Has&#322;o</label>
+    <input type="password" id="pwd" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autofocus>
+    <button class="btn" id="btn">Wejd&#378; &#8594;</button>
+  </div>
+  <div class="note">FleetFuel &mdash; System zarz&#261;dzania flot&#261;</div>
+</div>
+<script>
+const btn=document.getElementById('btn');
+const err=document.getElementById('err');
+async function login(){
+  const pwd=document.getElementById('pwd').value;
+  if(!pwd){err.classList.add('show');return;}
+  err.classList.remove('show');
+  btn.disabled=true;btn.textContent='...';
+  const res=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pwd})});
+  if(res.ok){window.location.href='/';}
+  else{err.classList.add('show');btn.disabled=false;btn.textContent='Wejd\u017c \u2192';document.getElementById('pwd').value='';document.getElementById('pwd').focus();}
+}
+btn.addEventListener('click',login);
+document.addEventListener('keydown',e=>{if(e.key==='Enter')login();});
+</script>
+</body>
+</html>
