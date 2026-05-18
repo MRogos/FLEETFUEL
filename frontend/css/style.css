@@ -12,7 +12,7 @@
   --green: #2ecc71;
   --red: #e74c3c;
   --blue: #3498db;
-  --mono: 'Share Tech Mono', monospace;
+  --mono: 'Rajdhani', sans-serif;
   --sans: 'Syne', sans-serif;
 }
 
@@ -143,10 +143,11 @@ nav button.active { background: var(--bg3); color: var(--accent); }
 
 .stat-value {
   font-family: var(--mono);
-  font-size: 28px;
+  font-size: 30px;
   font-weight: 700;
   color: var(--text);
   line-height: 1;
+  letter-spacing: 0.5px;
 }
 
 .stat-unit {
