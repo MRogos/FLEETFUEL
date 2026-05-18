@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FleetFuel</title>
-<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<title>Vipremium Fuel</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#0a0c0f;--bg2:#111318;--bg3:#181c22;--border:#232830;--border2:#2e3540;--text:#e8edf3;--text2:#8a95a3;--text3:#4a5568;--accent:#f0a500;--accent2:#e06c00;--red:#e74c3c;--mono:'Space Mono',monospace;--sans:'Syne',sans-serif}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -30,18 +30,18 @@ input[type=password]:focus{border-color:var(--accent)}
 </head>
 <body>
 <div class="wrap">
-  <div class="logo">
-    <div class="logo-icon">&#9981;</div>
-    <div class="logo-text">Fleet<span>Fuel</span></div>
+  <div class="logo" style="flex-direction:column;gap:6px">
+    <img src="/img/logo.png" alt="Vipremium" style="height:48px;object-fit:contain;filter:brightness(1.1)">
+    <div style="font-family:var(--sans);font-size:13px;font-weight:800;letter-spacing:4px;color:var(--accent);text-transform:uppercase">FUEL</div>
   </div>
   <div class="card">
-    <div class="card-title">Wpisz has&#322;o dost&#281;pu</div>
+    <div class="card-title">Dost&#281;p do systemu</div>
     <div class="error" id="err">Nieprawid&#322;owe has&#322;o</div>
     <label for="pwd">Has&#322;o</label>
     <input type="password" id="pwd" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autofocus>
     <button class="btn" id="btn">Wejd&#378; &#8594;</button>
   </div>
-  <div class="note">FleetFuel &mdash; System zarz&#261;dzania flot&#261;</div>
+  <div class="note">Vipremium Transport &mdash; System Paliwowy</div>
 </div>
 <script>
 const btn=document.getElementById('btn');
