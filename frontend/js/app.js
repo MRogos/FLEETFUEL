@@ -585,20 +585,18 @@ document.getElementById('btn-analyze').addEventListener('click', async () => {
     document.getElementById('sr-fuel').value    = scannedData.fuel_type || 'ON';
     document.getElementById('sr-station').value = scannedData.station || '';
 
-    // Pokaż info o źródle ceny i kursie
+    // Pokaz info o kursie (defensywnie)
     const rateInfo = document.getElementById('sr-rate-info');
-    let rateLines = [];
-    if (meta.currency && meta.currency !== 'PLN' && meta.rate) {
-      rateLines.push('1 ' + meta.currency + ' = ' + meta.rate.toFixed(4) + ' PLN (NBP ' + (meta.rate_date || '') + ')');
-    }
-    if (meta.price_auto_fetched && meta.price_source) {
-      rateLines.push('Cena pobrana automatycznie: ' + meta.price_source);
-    }
-    if (rateLines.length) {
+    if (rateInfo) {
+      const rateLines = [];
+      if (meta.currency && meta.currency !== 'PLN' && meta.rate) {
+        rateLines.push('1 ' + meta.currency + ' = ' + meta.rate.toFixed(4) + ' PLN (NBP ' + (meta.rate_date || '') + ')');
+      }
+      if (meta.price_auto_fetched && meta.price_source) {
+        rateLines.push('Cena: ' + meta.price_source);
+      }
       rateInfo.innerHTML = rateLines.join('<br>');
-      rateInfo.style.display = '';
-    } else {
-      rateInfo.style.display = 'none';
+      rateInfo.style.display = rateLines.length ? '' : 'none';
     }
 
     document.getElementById('scan-result').classList.add('show');
