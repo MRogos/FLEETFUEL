@@ -77,6 +77,12 @@ async function initDB() {
       CREATE INDEX IF NOT EXISTS idx_invoice_items_vehicle ON invoice_items(vehicle_id);
       CREATE INDEX IF NOT EXISTS idx_invoices_month ON invoices(month);
 
+      -- Dodaj kolumne currency jesli nie istnieje (migracja)
+      DO $$ BEGIN
+        ALTER TABLE invoices ADD COLUMN IF NOT EXISTS currency VARCHAR(5) DEFAULT 'EUR';
+      EXCEPTION WHEN duplicate_column THEN NULL;
+      END $$;
+
       -- Domyslni dostawcy
       INSERT INTO fuel_suppliers (name, country, currency)
         SELECT * FROM (VALUES
