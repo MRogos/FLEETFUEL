@@ -407,6 +407,7 @@ async function saveRefuel() {
     $('modal-refuel').classList.remove('open');
     loadRefuels();
     loadDashboard();
+    loadVehicleMonthlyChart();
     updateFleetCount();
   } catch (err) {
     showToast('❌ ' + (err.message || 'Błąd zapisu'));
@@ -420,6 +421,7 @@ async function deleteRefuel(id) {
     showToast('🗑️ Tankowanie usunięte');
     loadRefuels();
     loadDashboard();
+    loadVehicleMonthlyChart();
   } catch (err) { showToast('❌ Błąd usuwania'); }
 }
 
@@ -504,6 +506,133 @@ document.getElementById('btn-logout').addEventListener('click', async () => {
   await fetch('/api/auth/logout', { method: 'POST' });
   window.location.href = '/login.html';
 });
+
+
+// ─── KOLORY DLA AUT ─────────────────────
+const VEHICLE_COLORS = [
+  '#00d4c8', '#3498db', '#9b59b6', '#2ecc71', '#e74c3c',
+  '#f39c12', '#1abc9c', '#e67e22', '#e91e63', '#00bcd4'
+];
+
+// ─── WYKRES PER POJAZD ───────────────────
+async function loadVehicleMonthlyChart() {
+  try {
+    const data = await api('GET', '/stats/monthly-vehicles');
+    if (!data) return;
+
+    const { vehicles, months, current_data, current_month } = data;
+
+    // Label biezacego miesiaca
+    const mlabel = document.getElementById('current-month-label');
+    if (mlabel) {
+      const [y, m] = current_month.split('-');
+      const names = ['','Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
+      mlabel.textContent = names[parseInt(m)] + ' ' + y;
+    }
+
+    // ─── WYKRES BIEZACY MIESIAC ───
+    const el = document.getElementById('vehicle-monthly-chart');
+    if (!el) return;
+
+    const withData = current_data.filter(v => v.total_liters > 0);
+    if (!withData.length) {
+      el.innerHTML = '<div class="empty"><div class="empty-icon">⛽</div><div>Brak tankowań w tym miesiącu</div></div>';
+    } else {
+      const maxL = Math.max(...withData.map(v => v.total_liters));
+      el.innerHTML = withData.map((v, i) => {
+        const pct = maxL > 0 ? (v.total_liters / maxL * 100).toFixed(1) : 0;
+        const color = VEHICLE_COLORS[i % VEHICLE_COLORS.length];
+        const shortName = v.vehicle_name.split(' ').slice(-2).join(' ');
+        return \`<div style="margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+            <div style="font-size:13px;font-weight:700;color:var(--text)">\${shortName}
+              <span style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-left:6px">\${v.plate}</span>
+            </div>
+            <div style="font-family:var(--mono);font-size:13px;font-weight:700;color:\${color}">
+              \${v.total_liters.toFixed(1)} L
+              \${v.total_cost > 0 ? '<span style="color:var(--text3);font-size:10px;margin-left:6px">'+v.total_cost.toFixed(0)+' zł</span>' : ''}
+            </div>
+          </div>
+          <div style="height:10px;background:var(--bg3);border-radius:5px;overflow:hidden">
+            <div style="height:100%;width:\${pct}%;background:\${color};border-radius:5px;transition:width 0.5s ease"></div>
+          </div>
+        </div>\`;
+      }).join('');
+    }
+
+    // ─── WYKRES HISTORIA 6 MIESIECY ───
+    const histEl = document.getElementById('vehicle-history-chart');
+    if (!histEl || !months.length || !vehicles.length) {
+      if (histEl) histEl.innerHTML = '<div class="empty"><div>Brak danych historycznych</div></div>';
+      return;
+    }
+
+    // Zbuduj macierz danych: vehicle x month
+    const matrix = {};
+    vehicles.forEach(v => { matrix[v.id] = {}; months.forEach(m => { matrix[v.id][m] = 0; }); });
+    data.data.forEach(row => {
+      if (row.month && matrix[row.vehicle_id]) {
+        matrix[row.vehicle_id][row.month] = row.total_liters || 0;
+      }
+    });
+
+    // Pokaz tylko pojazdy ktore mialy tankowania
+    const activeVehicles = vehicles.filter(v => 
+      months.some(m => matrix[v.id][m] > 0)
+    );
+
+    if (!activeVehicles.length) {
+      histEl.innerHTML = '<div class="empty"><div>Brak danych historycznych</div></div>';
+      return;
+    }
+
+    const maxVal = Math.max(...activeVehicles.flatMap(v => months.map(m => matrix[v.id][m])));
+
+    // Legenda
+    const legend = activeVehicles.map((v, i) => {
+      const color = VEHICLE_COLORS[i % VEHICLE_COLORS.length];
+      const shortName = v.name.split(' ').slice(-2).join(' ');
+      return \`<div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2)">
+        <div style="width:10px;height:10px;border-radius:2px;background:\${color};flex-shrink:0"></div>
+        \${shortName}
+      </div>\`;
+    }).join('');
+
+    // Etykiety miesiecy
+    const monthLabels = months.map(m => {
+      const [y, mo] = m.split('-');
+      return mo + '/' + y.slice(2);
+    });
+
+    // Grupy slupkow per miesiac
+    const barWidth = Math.max(20, Math.floor(320 / (months.length * (activeVehicles.length + 0.5))));
+    const groupWidth = barWidth * activeVehicles.length + 8;
+
+    const bars = months.map((month, mi) => {
+      const groupBars = activeVehicles.map((v, vi) => {
+        const val = matrix[v.id][month] || 0;
+        const h = maxVal > 0 ? Math.max(2, (val / maxVal * 100)).toFixed(1) : 2;
+        const color = VEHICLE_COLORS[vi % VEHICLE_COLORS.length];
+        return \`<div title="\${v.name}: \${val.toFixed(1)}L" style="width:\${barWidth}px;height:\${h}%;background:\${color};border-radius:2px 2px 0 0;opacity:0.85;transition:opacity 0.2s;cursor:pointer" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.85"></div>\`;
+      }).join('');
+
+      return \`<div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1">
+        <div style="display:flex;align-items:flex-end;gap:2px;height:100px">\${groupBars}</div>
+        <div style="font-family:var(--mono);font-size:9px;color:var(--text3)">\${monthLabels[mi]}</div>
+      </div>\`;
+    }).join('');
+
+    histEl.innerHTML = \`
+      <div style="display:flex;gap:16px;margin-bottom:12px;flex-wrap:wrap">\${legend}</div>
+      <div style="display:flex;align-items:flex-end;gap:4px;height:120px;padding-bottom:20px;position:relative">
+        \${bars}
+      </div>
+    \`;
+
+  } catch (err) {
+    console.error('Wykres per pojazd:', err);
+  }
+}
 
 // ─── INIT ────────────────────────────────
 updateFleetCount();
@@ -639,6 +768,7 @@ document.getElementById('btn-scan-save').addEventListener('click', async () => {
     showToast('Tankowanie zapisane!');
     document.getElementById('modal-scan').classList.remove('open');
     loadDashboard();
+    loadVehicleMonthlyChart();
     loadRefuels();
   } catch (err) {
     showToast('Blad zapisu: ' + err.message);
