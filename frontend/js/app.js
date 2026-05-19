@@ -45,10 +45,12 @@ const navBtns = document.querySelectorAll('nav button');
 function showSection(name) {
   sections.forEach(s => $(`section-${s}`).classList.toggle('active', s === name));
   navBtns.forEach(b => b.classList.toggle('active', b.dataset.section === name));
-  if (name === 'dashboard') loadDashboard();
-  if (name === 'vehicles')  loadVehicles();
-  if (name === 'refuels')   loadRefuels();
-  if (name === 'reports')   loadReports();
+  if (name === 'dashboard')   loadDashboard();
+  if (name === 'vehicles')    loadVehicles();
+  if (name === 'refuels')     loadRefuels();
+  if (name === 'reports')     loadReports();
+  if (name === 'invoices')    loadInvoices();
+  if (name === 'comparison')  loadComparison();
 }
 
 navBtns.forEach(b => b.addEventListener('click', () => showSection(b.dataset.section)));
@@ -761,3 +763,275 @@ async function loadVehicleMonthlyChart() {
     console.error('Wykres per pojazd:', err);
   }
 }
+
+// =========================================
+// FAKTURY
+// =========================================
+
+let invoiceScannedItems = [];
+let invoiceSuppliers = [];
+
+// Laduj dostawcow
+async function loadSuppliers() {
+  try {
+    invoiceSuppliers = await api('GET', '/invoices/suppliers') || [];
+    var sel = document.getElementById('inv-supplier');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">-- wybierz --</option>';
+    invoiceSuppliers.forEach(function(s) {
+      var opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = s.name + ' (' + s.currency + ')';
+      sel.appendChild(opt);
+    });
+  } catch(e) {}
+}
+
+// Otworz modal faktury
+document.getElementById('btn-add-invoice') && document.getElementById('btn-add-invoice').addEventListener('click', function() {
+  invoiceScannedItems = [];
+  document.getElementById('inv-no').value = '';
+  document.getElementById('inv-month').value = new Date().toISOString().slice(0,7);
+  document.getElementById('inv-file').value = '';
+  document.getElementById('inv-result').style.display = 'none';
+  document.getElementById('inv-analyzing').style.display = 'none';
+  document.getElementById('btn-analyze-invoice').style.display = '';
+  document.getElementById('btn-save-invoice').style.display = 'none';
+  loadSuppliers();
+  document.getElementById('modal-invoice').classList.add('open');
+});
+
+document.getElementById('btn-cancel-invoice') && document.getElementById('btn-cancel-invoice').addEventListener('click', function() {
+  document.getElementById('modal-invoice').classList.remove('open');
+});
+
+// Analizuj fakture
+document.getElementById('btn-analyze-invoice') && document.getElementById('btn-analyze-invoice').addEventListener('click', async function() {
+  var supplierId = document.getElementById('inv-supplier').value;
+  var month = document.getElementById('inv-month').value;
+  var file = document.getElementById('inv-file').files[0];
+  if (!supplierId || !month || !file) { showToast('Wypelnij wymagane pola i wybierz plik'); return; }
+
+  document.getElementById('inv-analyzing').style.display = 'flex';
+  document.getElementById('btn-analyze-invoice').disabled = true;
+
+  try {
+    var fd = new FormData();
+    fd.append('file', file);
+    fd.append('supplier_id', supplierId);
+    fd.append('month', month);
+    fd.append('eur_rate', document.getElementById('inv-eur').value || '4.25');
+
+    var res = await fetch('/api/invoices/scan', { method: 'POST', body: fd });
+    var json = await res.json();
+
+    if (!json.ok) throw new Error(json.error || 'Blad analizy');
+
+    invoiceScannedItems = json.items || [];
+
+    if (!invoiceScannedItems.length) {
+      showToast('Nie odczytano zadnych pozycji');
+      document.getElementById('btn-analyze-invoice').disabled = false;
+      document.getElementById('inv-analyzing').style.display = 'none';
+      return;
+    }
+
+    // Pokaz tabele z wynikami
+    var tbody = document.getElementById('inv-items-table');
+    tbody.innerHTML = invoiceScannedItems.map(function(item, i) {
+      return '<tr>'
+        + '<td><input type="text" value="' + (item.plate||'') + '" data-i="' + i + '" data-field="plate" style="width:100px;background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:4px 6px;border-radius:4px;font-size:12px"></td>'
+        + '<td><input type="number" value="' + (item.liters||'') + '" data-i="' + i + '" data-field="liters" step="0.01" style="width:80px;background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:4px 6px;border-radius:4px;font-family:var(--mono);font-size:12px"></td>'
+        + '<td><input type="number" value="' + (item.net_amount||'') + '" data-i="' + i + '" data-field="net_amount" step="0.01" style="width:90px;background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:4px 6px;border-radius:4px;font-family:var(--mono);font-size:12px"></td>'
+        + '<td><input type="number" value="' + (item.gross_amount||'') + '" data-i="' + i + '" data-field="gross_amount" step="0.01" style="width:90px;background:var(--bg3);border:1px solid var(--border2);color:var(--accent);padding:4px 6px;border-radius:4px;font-family:var(--mono);font-size:12px"></td>'
+        + '<td style="font-size:11px;color:var(--text2)">' + (item.vehicle_name || '<span style="color:var(--text3)">nie dopasowano</span>') + '</td>'
+        + '</tr>';
+    }).join('');
+
+    // Nasluchuj zmian w inputs
+    tbody.querySelectorAll('input').forEach(function(inp) {
+      inp.addEventListener('change', function() {
+        var i = parseInt(this.dataset.i);
+        var field = this.dataset.field;
+        invoiceScannedItems[i][field] = field === 'plate' ? this.value : parseFloat(this.value);
+      });
+    });
+
+    document.getElementById('inv-result').style.display = 'block';
+    document.getElementById('btn-save-invoice').style.display = '';
+    showToast('Odczytano ' + invoiceScannedItems.length + ' pozycji');
+  } catch(e) {
+    showToast('Blad analizy: ' + e.message);
+    document.getElementById('btn-analyze-invoice').disabled = false;
+  } finally {
+    document.getElementById('inv-analyzing').style.display = 'none';
+    document.getElementById('btn-analyze-invoice').disabled = false;
+  }
+});
+
+// Zapisz fakture
+document.getElementById('btn-save-invoice') && document.getElementById('btn-save-invoice').addEventListener('click', async function() {
+  if (!invoiceScannedItems.length) { showToast('Brak pozycji do zapisania'); return; }
+  try {
+    await api('POST', '/invoices', {
+      supplier_id: parseInt(document.getElementById('inv-supplier').value),
+      invoice_no: document.getElementById('inv-no').value || null,
+      month: document.getElementById('inv-month').value,
+      eur_rate: parseFloat(document.getElementById('inv-eur').value) || 4.25,
+      items: invoiceScannedItems,
+    });
+    showToast('Faktura zapisana!');
+    document.getElementById('modal-invoice').classList.remove('open');
+    loadInvoices();
+    loadComparison();
+  } catch(e) {
+    showToast('Blad zapisu: ' + e.message);
+  }
+});
+
+// Laduj liste faktur
+async function loadInvoices() {
+  var month = document.getElementById('inv-filter-month') ? document.getElementById('inv-filter-month').value : '';
+  var tbody = document.getElementById('invoices-table');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="8"><div class="loading">Ladowanie...</div></td></tr>';
+  try {
+    var url = '/invoices' + (month ? '?month=' + month : '');
+    var data = await api('GET', url);
+    if (!data || !data.length) {
+      tbody.innerHTML = '<tr><td colspan="8"><div class="empty"><div class="empty-icon">🧾</div><div>Brak faktur. Wgraj pierwsza fakture.</div></div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map(function(inv) {
+      return '<tr>'
+        + '<td class="mono">' + inv.month + '</td>'
+        + '<td><strong>' + inv.supplier_name + '</strong></td>'
+        + '<td style="color:var(--text2);font-size:12px">' + (inv.invoice_no || '—') + '</td>'
+        + '<td class="mono">' + inv.item_count + '</td>'
+        + '<td class="mono">' + fmtNum(inv.total_liters, 2) + ' L</td>'
+        + '<td class="mono">' + fmtNum(inv.total_net, 2) + ' zl</td>'
+        + '<td class="mono" style="color:var(--accent)">' + fmtNum(inv.total_gross, 2) + ' zl</td>'
+        + '<td><button class="btn-danger" onclick="deleteInvoice(' + inv.id + ')">x</button></td>'
+        + '</tr>';
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="8"><div class="empty">Blad ladowania</div></td></tr>';
+  }
+}
+
+async function deleteInvoice(id) {
+  if (!confirm('Usunac te fakture?')) return;
+  await api('DELETE', '/invoices/' + id);
+  showToast('Faktura usunieta');
+  loadInvoices();
+  loadComparison();
+}
+
+// =========================================
+// POROWNANIE KARTA vs DYSTRYBUTOR
+// =========================================
+
+async function loadComparison() {
+  var month = document.getElementById('comp-month') ? document.getElementById('comp-month').value : '';
+  try {
+    var data = await api('GET', '/invoices/comparison' + (month ? '?month=' + month : ''));
+    if (!data) return;
+
+    // Dostepne miesiace w select
+    var sel = document.getElementById('comp-month');
+    if (sel && data.available_months) {
+      var cur = sel.value;
+      sel.innerHTML = '<option value="">Biezacy miesiac (' + data.month + ')</option>';
+      data.available_months.forEach(function(m) {
+        var opt = document.createElement('option');
+        opt.value = m;
+        opt.textContent = m;
+        sel.appendChild(opt);
+      });
+      if (cur) sel.value = cur;
+    }
+
+    // Sumy gorne
+    var totalCard = data.card_data.reduce(function(s,r) { return s + (r.card_gross||0); }, 0);
+    var totalPump = data.pump_data.reduce(function(s,r) { return s + (r.pump_total||0); }, 0);
+    var totalSaving = totalPump - totalCard;
+    var savingPct = totalPump > 0 ? (totalSaving / totalPump * 100) : 0;
+
+    var statsEl = document.getElementById('comp-stats');
+    if (statsEl) {
+      statsEl.innerHTML =
+        '<div class="stat-card"><div class="stat-label">Koszt karta (brutto)</div><div class="stat-value" style="color:var(--accent)">' + fmtNum(totalCard, 2) + '</div><div class="stat-unit">PLN</div></div>'
+        + '<div class="stat-card blue"><div class="stat-label">Koszt dystrybutor</div><div class="stat-value">' + fmtNum(totalPump, 2) + '</div><div class="stat-unit">PLN</div></div>'
+        + '<div class="stat-card green"><div class="stat-label">Oszczednosc</div><div class="stat-value">' + fmtNum(totalSaving, 2) + '</div><div class="stat-unit">PLN / ' + fmtNum(savingPct, 1) + '%</div></div>'
+        + '<div class="stat-card"><div class="stat-label">Miesiac</div><div class="stat-value" style="font-size:18px">' + data.month.slice(0,7) + '</div><div class="stat-unit">rozliczany</div></div>';
+    }
+
+    // Per dostawca
+    var suppEl = document.getElementById('comp-suppliers-table');
+    if (suppEl) {
+      if (!data.by_supplier || !data.by_supplier.length) {
+        suppEl.innerHTML = '<tr><td colspan="4"><div class="empty">Brak danych faktur dla tego miesiaca</div></td></tr>';
+      } else {
+        suppEl.innerHTML = data.by_supplier.map(function(s) {
+          return '<tr>'
+            + '<td><strong>' + s.supplier_name + '</strong> <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">' + s.currency + '</span></td>'
+            + '<td class="mono">' + fmtNum(s.total_liters, 2) + ' L</td>'
+            + '<td class="mono">' + fmtNum(s.total_net, 2) + ' zl</td>'
+            + '<td class="mono" style="color:var(--accent)">' + fmtNum(s.total_gross, 2) + ' zl</td>'
+            + '</tr>';
+        }).join('');
+      }
+    }
+
+    // Per pojazd - polacz dane
+    var allPlates = new Set();
+    var cardMap = {};
+    var pumpMap = {};
+
+    data.card_data.forEach(function(r) {
+      allPlates.add(r.plate);
+      cardMap[r.plate] = r;
+    });
+    data.pump_data.forEach(function(r) {
+      allPlates.add(r.plate);
+      pumpMap[r.plate] = r;
+    });
+
+    var tbody = document.getElementById('comp-table');
+    if (tbody) {
+      if (!allPlates.size) {
+        tbody.innerHTML = '<tr><td colspan="8"><div class="empty">Brak danych dla tego miesiaca</div></td></tr>';
+      } else {
+        var rows = Array.from(allPlates).sort().map(function(plate) {
+          var c = cardMap[plate] || {};
+          var p = pumpMap[plate] || {};
+          var cardGross = c.card_gross || 0;
+          var pumpTotal = p.pump_total || 0;
+          var saving = pumpTotal - cardGross;
+          var savPct = pumpTotal > 0 ? (saving / pumpTotal * 100) : 0;
+          var savColor = saving > 0 ? '#2ecc71' : saving < 0 ? '#e74c3c' : 'var(--text3)';
+          var vname = c.vehicle_name || p.vehicle_name || plate;
+
+          return '<tr>'
+            + '<td><div class="vehicle-name" style="font-size:12px">' + vname + '</div></td>'
+            + '<td class="mono">' + plate + '</td>'
+            + '<td class="mono" style="color:var(--accent)">' + (c.card_liters ? fmtNum(c.card_liters,2) + ' L' : '—') + '</td>'
+            + '<td class="mono" style="color:var(--accent)">' + (cardGross ? fmtNum(cardGross,2) + ' zl' : '—') + '</td>'
+            + '<td class="mono" style="color:#3498db">' + (p.pump_liters ? fmtNum(p.pump_liters,2) + ' L' : '—') + '</td>'
+            + '<td class="mono" style="color:#3498db">' + (pumpTotal ? fmtNum(pumpTotal,2) + ' zl' : '—') + '</td>'
+            + '<td class="mono" style="color:' + savColor + ';font-weight:700">' + (saving ? fmtNum(saving,2) + ' zl' : '—') + '</td>'
+            + '<td class="mono" style="color:' + savColor + '">' + (savPct ? fmtNum(savPct,1) + '%' : '—') + '</td>'
+            + '</tr>';
+        });
+        tbody.innerHTML = rows.join('');
+      }
+    }
+  } catch(e) {
+    console.error('Comparison error:', e);
+  }
+}
+
+// Nasluchuj zmiany miesiaca w porownaniu
+document.getElementById('comp-month') && document.getElementById('comp-month').addEventListener('change', loadComparison);
+document.getElementById('inv-filter-month') && document.getElementById('inv-filter-month').addEventListener('change', loadInvoices);
+
