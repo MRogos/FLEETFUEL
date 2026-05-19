@@ -50,6 +50,22 @@
         <div class="consumption-list" id="consumption-chart"><div class="loading">Ładowanie...</div></div>
       </div>
     </div>
+
+    <!-- WYKRES SPALANIA PER POJAZD PER MIESIAC -->
+    <div style="margin-top:20px">
+      <div class="chart-card" style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:20px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+          <div class="chart-title" style="margin-bottom:0">Litry paliwa per pojazd — bieżący miesiąc</div>
+          <div id="current-month-label" style="font-family:var(--mono);font-size:11px;color:var(--accent)"></div>
+        </div>
+        <div id="vehicle-monthly-chart"><div class="loading">Ładowanie...</div></div>
+
+        <div style="margin-top:24px;border-top:1px solid var(--border);padding-top:16px">
+          <div class="chart-title" style="margin-bottom:16px">Porównanie miesięczne — ostatnie 6 miesięcy (litry)</div>
+          <div id="vehicle-history-chart"><div class="loading">Ładowanie...</div></div>
+        </div>
+      </div>
+    </div>
     <div style="margin-top:24px">
       <div class="section-header">
         <div class="section-label">Ostatnie tankowania</div>
