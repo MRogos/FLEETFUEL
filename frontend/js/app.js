@@ -539,6 +539,29 @@ async function loadComparison() {
   }catch(e){console.error('Comparison:',e);}
 }
 
+
+/* AUTO-KURS NBP (dzien poprzedzajacy) */
+async function fetchNbpRate(currency) {
+  if(!currency || currency === 'PLN') {
+    if($('inv-eur')) $('inv-eur').value = '1.0000';
+    if($('inv-eur-label')) $('inv-eur-label').textContent = 'Kurs (PLN = 1)';
+    return;
+  }
+  try {
+    // NBP - ostatni dostepny kurs (dzien poprzedzajacy)
+    const res = await fetch('https://api.nbp.pl/api/exchangerates/rates/a/' + currency.toLowerCase() + '/?format=json');
+    if(!res.ok) throw new Error('NBP error');
+    const data = await res.json();
+    const rate = data.rates[0].mid;
+    const date = data.rates[0].effectiveDate;
+    if($('inv-eur')) $('inv-eur').value = parseFloat(rate).toFixed(4);
+    if($('inv-eur-label')) $('inv-eur-label').textContent = 'Kurs ' + currency + '/PLN (NBP ' + date + ')';
+    showToast('Kurs ' + currency + '/PLN: ' + rate + ' (NBP ' + date + ')');
+  } catch(e) {
+    if($('inv-eur-label')) $('inv-eur-label').textContent = 'Kurs ' + currency + '/PLN';
+  }
+}
+
 /* ─── INIT: wszystkie event listenery po zaladowaniu DOM ─── */
 document.addEventListener('DOMContentLoaded', function() {
 
@@ -582,8 +605,16 @@ document.addEventListener('DOMContentLoaded', function() {
     $('btn-analyze-invoice').style.display='';
     $('btn-analyze-invoice').disabled=false;
     $('btn-save-invoice').style.display='none';
+    // Domyslna waluta EUR, kurs z wczoraj
+    if($('inv-currency')) $('inv-currency').value='EUR';
+    fetchNbpRate('EUR');
     loadSuppliers();
     $('modal-invoice').classList.add('open');
+  });
+
+  // Auto-pobierz kurs gdy zmienia sie waluta
+  $('inv-currency') && $('inv-currency').addEventListener('change', function() {
+    fetchNbpRate(this.value);
   });
 
   $('btn-cancel-invoice') && $('btn-cancel-invoice').addEventListener('click',()=>$('modal-invoice').classList.remove('open'));
@@ -598,6 +629,7 @@ document.addEventListener('DOMContentLoaded', function() {
       fd.append('file',file);
       fd.append('supplier_id',supplierId);
       fd.append('month',month);
+      fd.append('invoice_currency',$('inv-currency')?$('inv-currency').value:'EUR');
       fd.append('eur_rate',$('inv-eur').value||'4.25');
       const res=await fetch('/api/invoices/scan',{method:'POST',body:fd});
       const json=await res.json();
@@ -630,6 +662,7 @@ document.addEventListener('DOMContentLoaded', function() {
         supplier_id:parseInt($('inv-supplier').value),
         invoice_no:$('inv-no').value||null,
         month:$('inv-month').value,
+        invoice_currency:$('inv-currency')?$('inv-currency').value:'EUR',
         eur_rate:parseFloat($('inv-eur').value)||4.25,
         items:invoiceScannedItems,
       });
