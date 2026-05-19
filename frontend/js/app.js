@@ -360,7 +360,12 @@ $('btn-analyze').addEventListener('click',async()=>{
     $('sr-mileage').value=scannedData.mileage||'';
     $('sr-liters').value=scannedData.liters||'';
     $('sr-price').value=scannedData.price_per_l||'';
-    $('sr-total').value=scannedData.total||'';
+    // Auto-oblicz total jesli brak a mamy cene i litry
+    const autoTotal = scannedData.total ||
+      (scannedData.price_per_l && scannedData.liters
+        ? Math.round(scannedData.price_per_l * scannedData.liters * 100) / 100
+        : null);
+    $('sr-total').value=autoTotal||'';
     $('sr-fuel').value=scannedData.fuel_type||'ON';
     $('sr-station').value=scannedData.station||'';
     const ri=$('sr-rate-info');
