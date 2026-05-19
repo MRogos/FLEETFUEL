@@ -10,6 +10,78 @@ const upload = multer({
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+// GET /api/invoices/comparison — porownanie dystrybutor vs karta
+router.get('/comparison', async (req, res, next) => {
+  try {
+    const { month } = req.query;
+    const currentMonth = month || new Date().toISOString().slice(0,7);
+
+    // Koszty z kart (faktury) per pojazd
+    const { rows: cardData } = await pool.query(`
+      SELECT
+        COALESCE(v.id::text, ii.plate) AS vehicle_key,
+        COALESCE(v.name, ii.plate)     AS vehicle_name,
+        COALESCE(v.plate, ii.plate)    AS plate,
+        COALESCE(SUM(ii.gross_amount),0)::float AS card_gross,
+        COALESCE(SUM(ii.net_amount),0)::float   AS card_net,
+        COALESCE(SUM(ii.liters),0)::float       AS card_liters,
+        COUNT(DISTINCT i.supplier_id)::int       AS supplier_count
+      FROM invoice_items ii
+      JOIN invoices i ON i.id = ii.invoice_id
+      LEFT JOIN vehicles v ON v.id = ii.vehicle_id
+      WHERE i.month = $1
+      GROUP BY vehicle_key, vehicle_name, plate
+      ORDER BY plate
+    `, [currentMonth]);
+
+    // Koszty z dystrybutora (skan/recznie) per pojazd
+    const { rows: pumpData } = await pool.query(`
+      SELECT
+        v.id::text AS vehicle_key,
+        v.name     AS vehicle_name,
+        v.plate    AS plate,
+        COALESCE(SUM(r.total),0)::float  AS pump_total,
+        COALESCE(SUM(r.liters),0)::float AS pump_liters,
+        COUNT(r.id)::int                 AS refuel_count
+      FROM vehicles v
+      LEFT JOIN refuels r ON r.vehicle_id = v.id
+        AND TO_CHAR(r.date,'YYYY-MM') = $1
+      GROUP BY v.id, v.name, v.plate
+      ORDER BY v.plate
+    `, [currentMonth]);
+
+    // Sumy per dostawca
+    const { rows: bySupplier } = await pool.query(`
+      SELECT
+        s.name AS supplier_name,
+        s.currency,
+        COALESCE(SUM(ii.gross_amount),0)::float AS total_gross,
+        COALESCE(SUM(ii.net_amount),0)::float   AS total_net,
+        COALESCE(SUM(ii.liters),0)::float       AS total_liters
+      FROM invoices i
+      JOIN fuel_suppliers s ON s.id = i.supplier_id
+      JOIN invoice_items ii ON ii.invoice_id = i.id
+      WHERE i.month = $1
+      GROUP BY s.id, s.name, s.currency
+      ORDER BY total_gross DESC
+    `, [currentMonth]);
+
+    // Dostepne miesiace
+    const { rows: months } = await pool.query(`
+      SELECT DISTINCT month FROM invoices ORDER BY month DESC LIMIT 12
+    `);
+
+    res.json({
+      month: currentMonth,
+      card_data: cardData,
+      pump_data: pumpData,
+      by_supplier: bySupplier,
+      available_months: months.map(m => m.month),
+    });
+  } catch(err) { next(err); }
+});
+
+
 // GET /api/invoices/suppliers
 router.get('/suppliers', async (req, res, next) => {
   try {
@@ -17,6 +89,8 @@ router.get('/suppliers', async (req, res, next) => {
     res.json(rows);
   } catch(err) { next(err); }
 });
+
+
 
 // GET /api/invoices — lista faktur
 router.get('/', async (req, res, next) => {
@@ -229,75 +303,5 @@ router.delete('/:id', async (req, res, next) => {
   } catch(err) { next(err); }
 });
 
-// GET /api/invoices/comparison — porownanie dystrybutor vs karta
-router.get('/comparison', async (req, res, next) => {
-  try {
-    const { month } = req.query;
-    const currentMonth = month || new Date().toISOString().slice(0,7);
-
-    // Koszty z kart (faktury) per pojazd
-    const { rows: cardData } = await pool.query(`
-      SELECT
-        COALESCE(v.id::text, ii.plate) AS vehicle_key,
-        COALESCE(v.name, ii.plate)     AS vehicle_name,
-        COALESCE(v.plate, ii.plate)    AS plate,
-        COALESCE(SUM(ii.gross_amount),0)::float AS card_gross,
-        COALESCE(SUM(ii.net_amount),0)::float   AS card_net,
-        COALESCE(SUM(ii.liters),0)::float       AS card_liters,
-        COUNT(DISTINCT i.supplier_id)::int       AS supplier_count
-      FROM invoice_items ii
-      JOIN invoices i ON i.id = ii.invoice_id
-      LEFT JOIN vehicles v ON v.id = ii.vehicle_id
-      WHERE i.month = $1
-      GROUP BY vehicle_key, vehicle_name, plate
-      ORDER BY plate
-    `, [currentMonth]);
-
-    // Koszty z dystrybutora (skan/recznie) per pojazd
-    const { rows: pumpData } = await pool.query(`
-      SELECT
-        v.id::text AS vehicle_key,
-        v.name     AS vehicle_name,
-        v.plate    AS plate,
-        COALESCE(SUM(r.total),0)::float  AS pump_total,
-        COALESCE(SUM(r.liters),0)::float AS pump_liters,
-        COUNT(r.id)::int                 AS refuel_count
-      FROM vehicles v
-      LEFT JOIN refuels r ON r.vehicle_id = v.id
-        AND TO_CHAR(r.date,'YYYY-MM') = $1
-      GROUP BY v.id, v.name, v.plate
-      ORDER BY v.plate
-    `, [currentMonth]);
-
-    // Sumy per dostawca
-    const { rows: bySupplier } = await pool.query(`
-      SELECT
-        s.name AS supplier_name,
-        s.currency,
-        COALESCE(SUM(ii.gross_amount),0)::float AS total_gross,
-        COALESCE(SUM(ii.net_amount),0)::float   AS total_net,
-        COALESCE(SUM(ii.liters),0)::float       AS total_liters
-      FROM invoices i
-      JOIN fuel_suppliers s ON s.id = i.supplier_id
-      JOIN invoice_items ii ON ii.invoice_id = i.id
-      WHERE i.month = $1
-      GROUP BY s.id, s.name, s.currency
-      ORDER BY total_gross DESC
-    `, [currentMonth]);
-
-    // Dostepne miesiace
-    const { rows: months } = await pool.query(`
-      SELECT DISTINCT month FROM invoices ORDER BY month DESC LIMIT 12
-    `);
-
-    res.json({
-      month: currentMonth,
-      card_data: cardData,
-      pump_data: pumpData,
-      by_supplier: bySupplier,
-      available_months: months.map(m => m.month),
-    });
-  } catch(err) { next(err); }
-});
 
 module.exports = router;
