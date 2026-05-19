@@ -133,7 +133,8 @@ router.post('/scan', upload.single('file'), async (req, res, next) => {
     const platesStr = vehicles.map(function(v) { return v.plate; }).join(', ');
     const { rows: suppliers } = await pool.query('SELECT * FROM fuel_suppliers WHERE id=$1', [supplier_id]);
     const supplier = suppliers[0] || { name: 'Nieznany', currency: 'PLN' };
-    const currency = supplier.currency || 'PLN';
+    // Waluta z faktury (moze byc inna niz domyslna dostawcy)
+    const currency = req.body.invoice_currency || supplier.currency || 'EUR';
     const eurRate = parseFloat(eur_rate) || 4.25;
 
     const isPdf = req.file.mimetype === 'application/pdf' || req.file.originalname.match(/\.pdf$/i);
@@ -211,7 +212,7 @@ router.post('/scan', upload.single('file'), async (req, res, next) => {
 // POST /api/invoices
 router.post('/', async (req, res, next) => {
   try {
-    const { supplier_id, invoice_no, month, eur_rate, notes, items } = req.body;
+    const { supplier_id, invoice_no, month, eur_rate, invoice_currency, notes, items } = req.body;
     if (!supplier_id || !month || !items || !items.length) {
       return res.status(400).json({ error: 'Brak wymaganych pol' });
     }
@@ -220,8 +221,8 @@ router.post('/', async (req, res, next) => {
     try {
       await conn.query('BEGIN');
       const { rows: inv } = await conn.query(
-        'INSERT INTO invoices (supplier_id, invoice_no, month, eur_rate, notes) VALUES ($1,$2,$3,$4,$5) RETURNING *',
-        [supplier_id, invoice_no || null, month, eur_rate || null, notes || null]
+        'INSERT INTO invoices (supplier_id, invoice_no, month, currency, eur_rate, notes) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+        [supplier_id, invoice_no || null, month, invoice_currency || 'EUR', eur_rate || null, notes || null]
       );
       const invoiceId = inv[0].id;
       for (var i = 0; i < items.length; i++) {
