@@ -20,6 +20,8 @@
     <button data-section="vehicles">Pojazdy</button>
     <button data-section="refuels">Tankowania</button>
     <button data-section="reports">Raporty</button>
+    <button data-section="invoices">Faktury</button>
+    <button data-section="comparison">Porownanie</button>
   </nav>
   <div class="header-right">
     <span class="fleet-count" id="fleet-count">— POJAZDY</span>
@@ -273,6 +275,61 @@
       <button class="btn-ghost" id="btn-cancel-scan">Anuluj</button>
       <button class="btn" id="btn-analyze" disabled>Analizuj zdj&#281;cia</button>
       <button class="btn" id="btn-scan-save" style="display:none">Zapisz tankowanie</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- MODAL: FAKTURA -->
+<div class="modal-overlay" id="modal-invoice">
+  <div class="modal" style="width:560px">
+    <div class="modal-title">Wgraj fakture paliwowa</div>
+
+    <div class="form-cols">
+      <div class="form-row">
+        <label>Dostawca *</label>
+        <select id="inv-supplier"><option value="">-- wybierz --</option></select>
+      </div>
+      <div class="form-row">
+        <label>Miesiac *</label>
+        <input type="month" id="inv-month">
+      </div>
+    </div>
+    <div class="form-cols">
+      <div class="form-row">
+        <label>Nr faktury</label>
+        <input type="text" id="inv-no" placeholder="opcjonalnie">
+      </div>
+      <div class="form-row">
+        <label>Kurs EUR/PLN</label>
+        <input type="number" id="inv-eur" placeholder="4.25" step="0.0001" value="4.25">
+      </div>
+    </div>
+    <div class="form-row">
+      <label>Plik faktury (PDF lub Excel) *</label>
+      <input type="file" id="inv-file" accept=".pdf,.xlsx,.xls,.csv" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--sans);font-size:13px;padding:8px;border-radius:7px;width:100%">
+    </div>
+
+    <div id="inv-analyzing" style="display:none;align-items:center;gap:10px;margin:12px 0;color:var(--text2);font-size:13px">
+      <div class="spinner"></div>
+      <span>Claude analizuje fakture...</span>
+    </div>
+
+    <!-- Podglad wynikow -->
+    <div id="inv-result" style="display:none;margin-top:12px">
+      <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Odczytane pozycje — sprawdz i popraw</div>
+      <div class="table-wrap" style="max-height:280px;overflow-y:auto">
+        <table>
+          <thead><tr><th>Tablica</th><th>Litry</th><th>Netto</th><th>Brutto</th><th>Pojazd</th></tr></thead>
+          <tbody id="inv-items-table"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-ghost" id="btn-cancel-invoice">Anuluj</button>
+      <button class="btn" id="btn-analyze-invoice">Analizuj fakture</button>
+      <button class="btn" id="btn-save-invoice" style="display:none;background:#2ecc71">Zapisz fakture</button>
     </div>
   </div>
 </div>
