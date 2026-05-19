@@ -52,7 +52,6 @@ const perVehicle = async (req, res, next) => {
       ORDER BY v.name
     `);
 
-    // Calculate average consumption per vehicle using ordered refuels
     for (const row of rows) {
       const { rows: vr } = await pool.query(
         `SELECT liters, mileage FROM refuels WHERE vehicle_id=$1 AND mileage IS NOT NULL ORDER BY mileage`,
@@ -75,4 +74,62 @@ const perVehicle = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { dashboard, monthly, perVehicle };
+// Spalanie per pojazd per miesiac (ostatnie 6 miesiecy)
+const monthlyPerVehicle = async (req, res, next) => {
+  try {
+    // Pobierz wszystkie pojazdy
+    const { rows: vehicles } = await pool.query('SELECT id, name, plate FROM vehicles ORDER BY name');
+
+    // Pobierz ostatnie 6 miesiecy
+    const { rows: months } = await pool.query(`
+      SELECT DISTINCT TO_CHAR(date, 'YYYY-MM') AS month
+      FROM refuels
+      WHERE date >= NOW() - INTERVAL '6 months'
+      ORDER BY month
+    `);
+
+    // Pobierz litry per pojazd per miesiac
+    const { rows: data } = await pool.query(`
+      SELECT
+        v.id AS vehicle_id,
+        v.name AS vehicle_name,
+        v.plate,
+        TO_CHAR(r.date, 'YYYY-MM') AS month,
+        COALESCE(SUM(r.liters), 0)::float AS total_liters,
+        COALESCE(SUM(r.total), 0)::float  AS total_cost,
+        COUNT(r.id)::int                  AS refuel_count
+      FROM vehicles v
+      LEFT JOIN refuels r ON r.vehicle_id = v.id
+        AND r.date >= NOW() - INTERVAL '6 months'
+      GROUP BY v.id, v.name, v.plate, TO_CHAR(r.date, 'YYYY-MM')
+      ORDER BY v.name, month
+    `);
+
+    // Aktualny miesiac - litry per pojazd
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const { rows: currentData } = await pool.query(`
+      SELECT
+        v.id AS vehicle_id,
+        v.name AS vehicle_name,
+        v.plate,
+        COALESCE(SUM(r.liters), 0)::float AS total_liters,
+        COALESCE(SUM(r.total), 0)::float  AS total_cost,
+        COUNT(r.id)::int                  AS refuel_count
+      FROM vehicles v
+      LEFT JOIN refuels r ON r.vehicle_id = v.id
+        AND TO_CHAR(r.date, 'YYYY-MM') = $1
+      GROUP BY v.id, v.name, v.plate
+      ORDER BY total_liters DESC
+    `, [currentMonth]);
+
+    res.json({
+      vehicles,
+      months: months.map(m => m.month),
+      data,
+      current_month: currentMonth,
+      current_data: currentData,
+    });
+  } catch (err) { next(err); }
+};
+
+module.exports = { dashboard, monthly, perVehicle, monthlyPerVehicle };
