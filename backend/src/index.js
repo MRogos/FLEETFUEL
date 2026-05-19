@@ -13,6 +13,7 @@ const vehiclesRouter = require('./routes/vehicles');
 const refuelsRouter = require('./routes/refuels');
 const statsRouter = require('./routes/stats');
 const scanRouter = require('./routes/scan');
+const invoicesRouter = require('./routes/invoices');
 const requireAuth = require('./middleware/auth');
 
 const app = express();
@@ -48,6 +49,7 @@ app.use('/api/vehicles', vehiclesRouter);
 app.use('/api/refuels', refuelsRouter);
 app.use('/api/stats', statsRouter);
 app.use('/api/scan', scanRouter);
+app.use('/api/invoices', invoicesRouter);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
