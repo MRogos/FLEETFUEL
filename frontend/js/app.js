@@ -418,7 +418,7 @@ async function loadVehicleMonthlyChart() {
         el.innerHTML=withData.map((v,i)=>{
           const pct=maxL>0?(v.total_liters/maxL*100).toFixed(1):0;
           const color=VEHICLE_COLORS[i%VEHICLE_COLORS.length];
-          const sn=v.vehicle_name?v.vehicle_name.split(' ').slice(-2).join(' '):v.plate;
+          const sn=v.plate||v.vehicle_name||'?';
           const cost=v.total_cost>0?` <span style="color:var(--text3);font-size:10px">${v.total_cost.toFixed(0)} zł</span>`:'';
           return `<div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;margin-bottom:5px"><div style="font-size:13px;font-weight:700;color:var(--text)">${sn} <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">${v.plate}</span></div><div style="font-family:var(--mono);font-size:13px;font-weight:700;color:${color}">${v.total_liters.toFixed(1)} L${cost}</div></div><div style="height:10px;background:var(--bg3);border-radius:5px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${color};border-radius:5px"></div></div></div>`;
         }).join('');
@@ -433,7 +433,7 @@ async function loadVehicleMonthlyChart() {
     if(!activeVehicles.length){histEl.innerHTML='<div class="empty"><div>Brak danych historycznych</div></div>';return;}
     const allVals=activeVehicles.reduce((acc,v)=>acc.concat(months.map(m=>matrix[v.id][m])),[]);
     const maxVal=Math.max(...allVals)||1;
-    const legend=activeVehicles.map((v,i)=>`<div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2)"><div style="width:10px;height:10px;border-radius:2px;background:${VEHICLE_COLORS[i%VEHICLE_COLORS.length]};flex-shrink:0"></div>${v.name?v.name.split(' ').slice(-2).join(' '):v.plate}</div>`).join('');
+    const legend=activeVehicles.map((v,i)=>`<div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2)"><div style="width:10px;height:10px;border-radius:2px;background:${VEHICLE_COLORS[i%VEHICLE_COLORS.length]};flex-shrink:0"></div>${v.plate||v.name||'?'}</div>`).join('');
     const bars=months.map(month=>{
       const [y,mo]=month.split('-');
       const label=mo+'/'+y.slice(2);
@@ -620,6 +620,16 @@ document.addEventListener('DOMContentLoaded', function() {
   // Auto-pobierz kurs gdy zmienia sie waluta
   $('inv-currency') && $('inv-currency').addEventListener('change', function() {
     fetchNbpRate(this.value);
+  });
+
+  // Gdy zmienia sie dostawca - ustaw domyslna walute i pobierz kurs
+  $('inv-supplier') && $('inv-supplier').addEventListener('change', function() {
+    const supplierId = parseInt(this.value);
+    const supplier = invoiceSuppliers.find(s => s.id === supplierId);
+    if(supplier && $('inv-currency')) {
+      $('inv-currency').value = supplier.currency || 'EUR';
+      fetchNbpRate(supplier.currency || 'EUR');
+    }
   });
 
   $('btn-cancel-invoice') && $('btn-cancel-invoice').addEventListener('click',()=>$('modal-invoice').classList.remove('open'));
