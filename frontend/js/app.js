@@ -597,7 +597,21 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Scan modal
   $('btn-scan') && $('btn-scan').addEventListener('click',openScanModal);
-  $('btn-cancel-scan') && $('btn-cancel-scan').addEventListener('click',()=>$('modal-scan').classList.remove('open'));
+  $('btn-cancel-scan') && $('btn-cancel-scan').addEventListener('click',()=>{
+    // Pelny reset modalu skanowania
+    scanFiles=[]; scannedData=null;
+    $('scan-previews').innerHTML='';
+    $('scan-result').classList.remove('show');
+    $('scan-analyzing').classList.remove('show');
+    $('scan-vehicle-row').style.display='none';
+    $('btn-analyze').style.display='';
+    $('btn-analyze').disabled=true;
+    $('btn-scan-save').style.display='none';
+    $('scan-input').value='';
+    $('scan-tankpool').checked=false;
+    const ri=$('sr-rate-info'); if(ri) ri.style.display='none';
+    $('modal-scan').classList.remove('open');
+  });
 
   // Invoice modal
   $('btn-add-invoice') && $('btn-add-invoice').addEventListener('click',()=>{
