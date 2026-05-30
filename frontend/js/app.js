@@ -352,7 +352,7 @@ $('btn-analyze').addEventListener('click',async()=>{
     const fd=new FormData();
     scanFiles.forEach(f=>fd.append('images',f));
     fd.append('country',country);
-    fd.append('use_tankpool',useTankpool?'true':'false');
+    fd.append('use_tankpool',useTankpool?'true':'false');  // use_tankpool = karta paliwowa bez ceny
     const res=await fetch('/api/scan',{method:'POST',body:fd});
     const json=await res.json();
     scannedData=json.data||{};
