@@ -13,13 +13,9 @@ const upload = multer({
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// Waluty per kraj
 const COUNTRY_CURRENCY = {
   PL: 'PLN', DE: 'EUR', NL: 'EUR', BE: 'EUR', FR: 'EUR', GB: 'GBP'
 };
-
-// ID stacji Tankpool24 Straelen w Tankerkönig (Heronger Feld 15)
-const TANKPOOL_STRAELEN_ID = '005056ba-7cb6-1ed2-bceb-90e360dc0de2';
 
 // Kurs waluty z NBP
 async function getRate(currency) {
@@ -30,95 +26,151 @@ async function getRate(currency) {
     const data = await res.json();
     return { rate: parseFloat(data.rates[0].mid), date: data.rates[0].effectiveDate };
   } catch {
-    const fallback = { EUR: 4.25, GBP: 5.00 };
-    return { rate: fallback[currency] || 4.25, date: 'fallback' };
+    return { rate: currency === 'EUR' ? 4.25 : 5.00, date: 'fallback' };
   }
 }
 
-// Cena diesla z Tankerkönig dla stacji Straelen
-async function getTankpoolDieselPrice() {
-  const apiKey = process.env.TANKERKOENIG_API_KEY;
-  if (!apiKey) return null;
-
+// Cena diesla z konkretnych zrodel per kraj
+async function getDieselPrice(country) {
   try {
-    const url = `https://creativecommons.tankerkoenig.de/api/detail.php?id=${TANKPOOL_STRAELEN_ID}&apikey=${apiKey}`;
-    const res = await fetch(url);
-    const data = await res.json();
-    if (data.ok && data.station && data.station.diesel) {
-      return {
-        price: parseFloat(data.station.diesel),
-        source: 'Tankpool24 Straelen (Tankerkönig)',
-        isOpen: data.station.isOpen,
-      };
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
+    switch(country) {
 
-// Pobierz cenę diesla przez Claude web search
-async function getDieselPriceViaSearch(country) {
-  try {
-    const locations = {
-      DE: 'Straelen Germany diesel price today EUR per liter',
-      NL: 'Netherlands diesel price today EUR per liter',
-      BE: 'Belgium diesel price today EUR per liter',
-      FR: 'France diesel price today EUR per liter',
-      GB: 'UK diesel price today GBP per liter',
-      PL: 'Polska cena diesla dzis PLN za litr',
-    };
-    const query = locations[country] || locations['DE'];
-
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'web-search-2025-03-05',
-      },
-      body: JSON.stringify({
-        model: 'claude-opus-4-5',
-        max_tokens: 512,
-        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-        messages: [{
-          role: 'user',
-          content: `${query}. Odpowiedz TYLKO jedną liczbą - aktualną cenę diesla za litr w walucie lokalnej (np. 1.85). Bez tekstu, tylko liczba.`
-        }]
-      })
-    });
-
-    const data = await response.json();
-    console.log('Web search response:', JSON.stringify(data).slice(0, 500));
-    // Zbierz wszystkie bloki tekstowe
-    const texts = (data.content || [])
-      .filter(b => b.type === 'text')
-      .map(b => b.text)
-      .join(' ');
-    // Szukaj liczby w formacie ceny (1.xx lub 1,xx)
-    const match = texts.match(/\b([12][\.\,]\d{2,3})\b/);
-    if (match) {
-      const price = parseFloat(match[1].replace(',', '.'));
-      if (!isNaN(price) && price > 0.8 && price < 3.5) {
-        return {
-          price,
-          source: `Cena rynkowa ${country} (web search)`,
-        };
+      case 'PL': {
+        // cenypaliw.fyi - oficjalne dane Orlen, codziennie aktualizowane
+        const res = await fetch('https://cenypaliw.fyi/', {
+          headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'text/html' }
+        });
+        const html = await res.text();
+        // Szukaj ceny ON z VAT
+        const match = html.match(/ON[^0-9]*?([5-9]\.[0-9]{2})/i) ||
+                      html.match(/diesel[^0-9]*?([5-9]\.[0-9]{2})/i) ||
+                      html.match(/([5-9]\.[0-9]{2})[^0-9]*?PLN[^0-9]*?VAT/i);
+        if (match) {
+          const price = parseFloat(match[1]);
+          if (price > 5 && price < 10) {
+            return { price, source: 'Orlen PL (cenypaliw.fyi)' };
+          }
+        }
+        // Fallback - szukaj jakiejkolwiek sensownej ceny
+        const prices = [...html.matchAll(/([5-9]\.[0-9]{2})/g)].map(m => parseFloat(m[1])).filter(p => p > 5.5 && p < 9);
+        if (prices.length) {
+          return { price: prices[0], source: 'Orlen PL (cenypaliw.fyi)' };
+        }
+        return { price: 6.89, source: 'Orlen PL (wartosc orientacyjna)' };
       }
+
+      case 'DE': {
+        // Tankerkoenig API jesli mamy klucz, inaczej fuel-prices.eu
+        const apiKey = process.env.TANKERKOENIG_API_KEY;
+        if (apiKey) {
+          const tankpoolId = '005056ba-7cb6-1ed2-bceb-90e360dc0de2';
+          const res = await fetch(`https://creativecommons.tankerkoenig.de/api/detail.php?id=${tankpoolId}&apikey=${apiKey}`);
+          const data = await res.json();
+          if (data.ok && data.station && data.station.diesel) {
+            return { price: parseFloat(data.station.diesel), source: 'Tankpool24 Straelen (Tankerkoenig)' };
+          }
+          // Fallback - okolica Straelen
+          const res2 = await fetch(`https://creativecommons.tankerkoenig.de/api/list.php?lat=51.4397&lng=6.2617&rad=5&sort=price&type=diesel&apikey=${apiKey}`);
+          const data2 = await res2.json();
+          if (data2.ok && data2.stations && data2.stations.length) {
+            const prices = data2.stations.map(s => s.price).filter(p => p > 0);
+            const avg = prices.reduce((a,b) => a+b) / prices.length;
+            return { price: Math.round(avg * 1000) / 1000, source: `Srednia Straelen DE (${prices.length} stacji)` };
+          }
+        }
+        // fuel-prices.eu - dane z MTS-K Niemcy
+        const res3 = await fetch('https://www.fuel-prices.eu/live/germany/', {
+          headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        const html3 = await res3.text();
+        const match3 = html3.match(/Diesel[^0-9]*?([1-2]\.[0-9]{2,3})/i);
+        if (match3) {
+          const price = parseFloat(match3[1]);
+          if (price > 1.2 && price < 2.5) return { price, source: 'Srednia DE (fuel-prices.eu)' };
+        }
+        return { price: 1.65, source: 'Niemcy DE (wartosc orientacyjna)' };
+      }
+
+      case 'FR': {
+        // fuel-prices.eu/live/france - dane rządowe Francja
+        const res = await fetch('https://www.fuel-prices.eu/live/france/', {
+          headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        const html = await res.text();
+        const match = html.match(/Diesel[^0-9]*?([1-2]\.[0-9]{2,3})/i) ||
+                      html.match(/([2]\.[0-9]{2,3})[^0-9]*?Diesel/i);
+        if (match) {
+          const price = parseFloat(match[1]);
+          if (price > 1.5 && price < 2.5) return { price, source: 'TotalEnergies/Srednia FR (fuel-prices.eu)' };
+        }
+        return { price: 2.08, source: 'Francja FR (wartosc orientacyjna)' };
+      }
+
+      case 'GB': {
+        // fuel-prices.eu/live/uk - dane UK Gov
+        const res = await fetch('https://www.fuel-prices.eu/live/uk/', {
+          headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        const html = await res.text();
+        const match = html.match(/Diesel[^0-9]*?([1-2]\.[0-9]{2,3})/i) ||
+                      html.match(/GBP[^0-9]*?([1-2]\.[0-9]{2,3})/i);
+        if (match) {
+          const price = parseFloat(match[1]);
+          if (price > 1.2 && price < 2.5) return { price, source: 'Srednia UK (fuel-prices.eu / Gov data)' };
+        }
+        // Konwertuj pence na GBP
+        const matchP = html.match(/([1-9][0-9]{2,3})[^0-9]*?p[^a-z]/i);
+        if (matchP) {
+          const pence = parseFloat(matchP[1]);
+          if (pence > 100 && pence < 250) return { price: Math.round(pence) / 100, source: 'UK (fuel-prices.eu)' };
+        }
+        return { price: 1.84, source: 'Wielka Brytania UK (wartosc orientacyjna)' };
+      }
+
+      case 'NL': {
+        const res = await fetch('https://www.fuel-prices.eu/live/netherlands/', {
+          headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        const html = await res.text();
+        const match = html.match(/Diesel[^0-9]*?([1-2]\.[0-9]{2,3})/i);
+        if (match) {
+          const price = parseFloat(match[1]);
+          if (price > 1.3 && price < 2.5) return { price, source: 'Srednia NL (fuel-prices.eu)' };
+        }
+        return { price: 1.72, source: 'Holandia NL (wartosc orientacyjna)' };
+      }
+
+      case 'BE': {
+        const res = await fetch('https://www.fuel-prices.eu/live/belgium/', {
+          headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        const html = await res.text();
+        const match = html.match(/Diesel[^0-9]*?([1-2]\.[0-9]{2,3})/i);
+        if (match) {
+          const price = parseFloat(match[1]);
+          if (price > 1.3 && price < 2.5) return { price, source: 'Srednia BE (fuel-prices.eu)' };
+        }
+        return { price: 1.68, source: 'Belgia BE (wartosc orientacyjna)' };
+      }
+
+      default:
+        return null;
     }
-    console.log('Nie znaleziono ceny w:', texts.slice(0, 200));
-    return null;
-  } catch {
-    return null;
+  } catch(e) {
+    console.error('getDieselPrice error:', country, e.message);
+    const fallback = { PL: 6.89, DE: 1.65, FR: 2.08, GB: 1.84, NL: 1.72, BE: 1.68 };
+    return fallback[country] ? { price: fallback[country], source: country + ' (wartosc orientacyjna)' } : null;
   }
 }
 
-// Skanowanie zdjęć
+// Tankerkoenig ID dla Tankpool24 Straelen
+const TANKPOOL_STRAELEN_ID = '005056ba-7cb6-1ed2-bceb-90e360dc0de2';
+
+// Skanowanie zdjec
 router.post('/', upload.array('images', 5), async (req, res, next) => {
   try {
     if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ error: 'Brak zdjęć' });
+      return res.status(400).json({ error: 'Brak zdjec' });
     }
 
     const country = req.body.country || 'DE';
@@ -127,16 +179,12 @@ router.post('/', upload.array('images', 5), async (req, res, next) => {
 
     const imageContents = req.files.map(file => ({
       type: 'image',
-      source: {
-        type: 'base64',
-        media_type: file.mimetype,
-        data: file.buffer.toString('base64'),
-      }
+      source: { type: 'base64', media_type: file.mimetype, data: file.buffer.toString('base64') }
     }));
 
     const currencyHint = currency === 'PLN'
-      ? 'Ceny są w PLN.'
-      : `Ceny są w ${currency}. Podaj wartości w oryginalnej walucie ${currency}, nie przeliczaj do PLN.`;
+      ? 'Ceny sa w PLN.'
+      : `Ceny sa w ${currency}. Podaj wartosci w oryginalnej walucie ${currency}.`;
 
     const response = await client.messages.create({
       model: 'claude-opus-4-5',
@@ -147,25 +195,19 @@ router.post('/', upload.array('images', 5), async (req, res, next) => {
           ...imageContents,
           {
             type: 'text',
-            text: `Przeanalizuj te zdjęcia z tankowania ciężarówki/samochodu dostawczego. ${currencyHint}
+            text: `Przeanalizuj te zdjecia z tankowania. ${currencyHint}
 
-Wyciągnij DOKŁADNIE:
-- mileage: przebieg z licznika km (liczba całkowita, czytaj uważnie każdą cyfrę)
-- liters: ilość paliwa w litrach z dystrybutora (liczba dziesiętna, czytaj uważnie)
-- price_per_l: cena za litr w ${currency} (liczba, null jeśli dystrybutor Tankpool - brak ceny)
-- total: łączna kwota w ${currency} (liczba, null jeśli brak)
-- fuel_type: rodzaj paliwa - domyślnie ON (diesel) jeśli nie widać inaczej
-- station: nazwa stacji jeśli widoczna (np. Tankpool, Aral, Shell)
-- has_price: true jeśli cena widoczna na zdjęciu, false jeśli brak
+Wyciagnij DOKLADNIE:
+- mileage: przebieg z licznika (liczba calkowita)
+- liters: ilosc paliwa w litrach (UWAGA: na dystrybutorach Tokheim gorny segment cyfry 7 bywa niewidoczny i wyglada jak 1 - jesli widzisz np. 13.54L na duzym pojeździe, rozważ ze to 73.54L)
+- price_per_l: cena za litr w ${currency} (null jesli brak - np. Tankpool nie pokazuje ceny)
+- total: laczna kwota w ${currency} (null jesli brak)
+- fuel_type: rodzaj paliwa (domyslnie ON/diesel)
+- station: nazwa stacji (np. Tankpool, Aral, Orlen, TotalEnergies)
+- has_price: true jesli cena widoczna, false jesli brak
 
-KLUCZOWE ZASADY ODCZYTU:
-1. Dystrybutory Tokheim mają wyświetlacze LCD gdzie GÓRNY SEGMENT cyfry 7 jest często NIEWIDOCZNY - wygląda jak 1. Jeśli widzisz "1X,XX LITER" gdzie X > 0, rozważ czy to nie jest "7X,XX".
-2. Dla ciężarówek/dostawczaków typowe tankowanie to 50-200 litrów. Jeśli odczytujesz mniej niż 20L dla dużego pojazdu - prawdopodobnie pierwsza cyfra to 7 lub inny segment jest niewidoczny.
-3. Litry: czytaj jako liczbę dziesiętną (np. 73.54, 125.40)
-4. Przebieg: 6-cyfrowa liczba całkowita (np. 970050)
-5. Jeśli widzisz "13,54 LITER" na Tokheim - podaj liters: 73.54 (7 z ukrytym segmentem)
-6. Odpowiedz TYLKO JSON, zero tekstu poza JSON.
-Przykład: {"mileage": 970050, "liters": 73.54, "price_per_l": null, "total": null, "fuel_type": "ON", "station": "Tokheim", "has_price": false}`
+Odpowiedz TYLKO JSON:
+{"mileage": 970050, "liters": 73.54, "price_per_l": null, "total": null, "fuel_type": "ON", "station": "Tankpool", "has_price": false}`
           }
         ]
       }]
@@ -175,31 +217,29 @@ Przykład: {"mileage": 970050, "liters": 73.54, "price_per_l": null, "total": nu
     let scanned = {};
     try {
       scanned = JSON.parse(text.replace(/```json|```/g, '').trim());
-    } catch { scanned = {}; }
+    } catch(e) {
+      const match = text.match(/\{[\s\S]*\}/);
+      if (match) { try { scanned = JSON.parse(match[0]); } catch(e2) {} }
+    }
 
-    // Pobierz kurs waluty
+    // Pobierz kurs
     const rateInfo = await getRate(currency);
     const rate = rateInfo.rate;
 
-    // Jeśli brak ceny i to Tankpool/Niemcy → pobierz z Tankerkönig
-    let tankpoolPrice = null;
-    let priceSource = null;
-
+    // Pobierz cene jesli brak na dystrybutorze (karta paliwowa - kazdy kraj)
+    let priceInfo = null;
     if (!scanned.price_per_l && !scanned.total && (useTankpool || scanned.has_price === false)) {
-      // Najpierw próbuj konkretną stację Tankpool Straelen
-      tankpoolPrice = await getTankpoolDieselPrice();
-      if (!tankpoolPrice) {
-        // Fallback: średnia okolicy
-        tankpoolPrice = await getDieselPriceViaSearch(country);
-      }
-      if (tankpoolPrice) {
-        scanned.price_per_l = tankpoolPrice.price;
-        priceSource = tankpoolPrice.source;
+      console.log('Pobieranie ceny dla kraju:', country);
+      priceInfo = await getDieselPrice(country);
+      if (priceInfo) {
+        scanned.price_per_l = priceInfo.price;
       }
     }
 
     // Przelicz na PLN
-    const price_per_l_pln = scanned.price_per_l ? Math.round(scanned.price_per_l * rate * 1000) / 1000 : null;
+    const price_per_l_pln = scanned.price_per_l
+      ? Math.round(scanned.price_per_l * rate * 1000) / 1000
+      : null;
     const total_orig = scanned.total;
     const total_pln = total_orig ? Math.round(total_orig * rate * 100) / 100 : null;
     const calc_total = total_pln || (price_per_l_pln && scanned.liters
@@ -217,38 +257,40 @@ Przykład: {"mileage": 970050, "liters": 73.54, "price_per_l": null, "total": nu
         station: scanned.station || null,
       },
       meta: {
-        country,
-        currency,
-        rate,
+        country, currency, rate,
         rate_date: rateInfo.date,
-        price_source: priceSource,
-        price_auto_fetched: !!tankpoolPrice,
-        original: {
-          price_per_l: scanned.price_per_l,
-          total: total_orig,
-        }
+        price_source: priceInfo ? priceInfo.source : null,
+        price_auto_fetched: !!priceInfo,
+        original: { price_per_l: scanned.price_per_l, total: total_orig }
       }
     });
-  } catch (err) {
-    next(err);
-  }
+  } catch(err) { next(err); }
 });
 
-// Endpoint: aktualny kurs waluty
+// Endpoint: aktualna cena diesla dla kraju
+router.get('/diesel-price/:country', async (req, res, next) => {
+  try {
+    const country = req.params.country.toUpperCase();
+    const currency = COUNTRY_CURRENCY[country] || 'EUR';
+    const priceInfo = await getDieselPrice(country);
+    const rateInfo = await getRate(currency);
+    res.json({
+      country, currency,
+      price_local: priceInfo ? priceInfo.price : null,
+      price_pln: priceInfo ? Math.round(priceInfo.price * rateInfo.rate * 100) / 100 : null,
+      source: priceInfo ? priceInfo.source : 'brak danych',
+      rate: rateInfo.rate,
+      rate_date: rateInfo.date,
+    });
+  } catch(err) { next(err); }
+});
+
+// Endpoint: kurs waluty
 router.get('/rate/:currency', async (req, res, next) => {
   try {
     const info = await getRate(req.params.currency.toUpperCase());
     res.json(info);
-  } catch (err) { next(err); }
-});
-
-// Endpoint: aktualna cena diesla Straelen
-router.get('/diesel-price', async (req, res, next) => {
-  try {
-    const country = req.query.country || "DE";
-    const price = await getTankpoolDieselPrice() || await getDieselPriceViaSearch(country);
-    res.json(price || { error: 'Brak klucza Tankerkönig lub brak danych' });
-  } catch (err) { next(err); }
+  } catch(err) { next(err); }
 });
 
 module.exports = router;
