@@ -268,6 +268,10 @@
       <div class="form-row"><label>Laczny koszt (PLN)</label><input type="number" id="r-total" placeholder="292.50" step="0.01" min="0"></div>
       <div class="form-row"><label>Przebieg (km)</label><input type="number" id="r-mileage" placeholder="153450"></div>
     </div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;background:rgba(0,212,200,0.06);border:1px solid rgba(0,212,200,0.2);padding:10px 14px;border-radius:8px">
+      <input type="checkbox" id="r-is-full" checked style="width:16px;height:16px;accent-color:var(--accent)">
+      <label for="r-is-full" style="font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;letter-spacing:0;text-transform:none">Pełne tankowanie (do pełna)</label>
+    </div>
     <div class="form-row"><label>Stacja paliw</label><input type="text" id="r-station" placeholder="np. Orlen, Shell, Tankpool..."></div>
     <div class="form-row"><label>Uwagi</label><input type="text" id="r-notes" placeholder="opcjonalnie"></div>
     <div class="modal-actions">
