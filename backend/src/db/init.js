@@ -73,6 +73,7 @@ async function initDB() {
         mileage     INTEGER,
         station     VARCHAR(100),
         notes       TEXT,
+        is_full     BOOLEAN     DEFAULT true,
         created_at  TIMESTAMPTZ DEFAULT NOW()
       );
     `);
@@ -117,6 +118,14 @@ async function initDB() {
         expire TIMESTAMP(6) NOT NULL,
         CONSTRAINT session_pkey PRIMARY KEY (sid) NOT DEFERRABLE INITIALLY IMMEDIATE
       );
+    `);
+
+    // Migracja is_full w refuels
+    await client.query(`
+      DO $$ BEGIN
+        ALTER TABLE refuels ADD COLUMN is_full BOOLEAN DEFAULT true;
+      EXCEPTION WHEN duplicate_column THEN NULL;
+      END $$;
     `);
 
     // Krok 6: migracja currency w invoices
