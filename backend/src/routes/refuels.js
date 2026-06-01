@@ -7,8 +7,8 @@ router.get('/',
   query('vehicle_id').optional().isInt(),
   query('fuel_type').optional().isIn(['PB95','PB98','ON','LPG','EV']),
   query('month').optional().matches(/^\d{4}-\d{2}$/),
-  validate,
-  ctrl.getAll
+  query('driver_id').optional().isInt(),
+  validate, ctrl.getAll
 );
 
 router.get('/:id', param('id').isInt(), validate, ctrl.getOne);
@@ -21,10 +21,10 @@ router.post('/',
   body('price_per_l').optional({ nullable: true }).isFloat({ min: 0 }),
   body('total').optional({ nullable: true }).isFloat({ min: 0 }),
   body('mileage').optional({ nullable: true }).isInt({ min: 0 }),
+  body('driver_id').optional({ nullable: true }).isInt(),
   body('station').optional({ nullable: true }).trim(),
   body('notes').optional({ nullable: true }).trim(),
-  validate,
-  ctrl.create
+  validate, ctrl.create
 );
 
 router.put('/:id',
@@ -32,13 +32,13 @@ router.put('/:id',
   body('date').optional().isDate(),
   body('liters').optional().isFloat({ min: 0.01 }),
   body('fuel_type').optional().isIn(['PB95','PB98','ON','LPG','EV']),
-  body('price_per_l').optional().isFloat({ min: 0 }),
-  body('total').optional().isFloat({ min: 0 }),
-  body('mileage').optional().isInt({ min: 0 }),
-  body('station').optional().trim(),
-  body('notes').optional().trim(),
-  validate,
-  ctrl.update
+  body('price_per_l').optional({ nullable: true }).isFloat({ min: 0 }),
+  body('total').optional({ nullable: true }).isFloat({ min: 0 }),
+  body('mileage').optional({ nullable: true }).isInt({ min: 0 }),
+  body('driver_id').optional({ nullable: true }).isInt(),
+  body('station').optional({ nullable: true }).trim(),
+  body('notes').optional({ nullable: true }).trim(),
+  validate, ctrl.update
 );
 
 router.delete('/:id', param('id').isInt(), validate, ctrl.remove);
