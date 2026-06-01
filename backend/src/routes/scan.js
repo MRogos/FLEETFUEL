@@ -115,7 +115,7 @@ router.post('/', upload.array('images', 5), async (req, res, next) => {
     const currencyHint = currency === 'PLN' ? 'Ceny sa w PLN.' : `Ceny sa w ${currency}. Podaj wartosci w oryginalnej walucie ${currency}.`;
 
     const response = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-opus-4-6',
       max_tokens: 1024,
       messages: [{
         role: 'user',
@@ -123,7 +123,7 @@ router.post('/', upload.array('images', 5), async (req, res, next) => {
           ...imageContents,
           {
             type: 'text',
-            text: `Przeanalizuj te zdjecia z tankowania. ${currencyHint}\n\nWyciagnij DOKLADNIE:\n- mileage: przebieg z licznika (liczba calkowita)\n- liters: ilosc paliwa w litrach (UWAGA: na dystrybutorach Tokheim gorny segment cyfry 7 bywa niewidoczny i wyglada jak 1)\n- price_per_l: cena za litr w ${currency} (null jesli brak)\n- total: laczna kwota w ${currency} (null jesli brak)\n- fuel_type: rodzaj paliwa (domyslnie ON/diesel)\n- station: nazwa stacji\n- has_price: true jesli cena widoczna, false jesli brak\n\nOdpowiedz TYLKO JSON:\n{"mileage": 970050, "liters": 73.54, "price_per_l": null, "total": null, "fuel_type": "ON", "station": "Tankpool", "has_price": false}`
+            text: `Przeanalizuj te zdjecia z tankowania. ${currencyHint}\n\nWyciagnij DOKLADNIE:\n- mileage: przebieg z licznika (liczba calkowita)\n- liters: ilosc paliwa w litrach (UWAGA: na dystrybutorach Tokheim gorny segment cyfry 7 bywa niewidoczny i wyglada jak 1 - jesli widzisz np. 13.85L na duzym pojezdzie, rozważ ze to 73.85L)\n- price_per_l: cena za litr w ${currency} (null jesli brak)\n- total: laczna kwota w ${currency} (null jesli brak)\n- fuel_type: rodzaj paliwa (domyslnie ON/diesel)\n- station: nazwa stacji\n- has_price: true jesli cena widoczna, false jesli brak\n\nOdpowiedz TYLKO JSON:\n{"mileage": 970050, "liters": 73.54, "price_per_l": null, "total": null, "fuel_type": "ON", "station": "Tankpool", "has_price": false}`
           }
         ]
       }]
