@@ -20,6 +20,7 @@
     <button data-section="vehicles">Pojazdy</button>
     <button data-section="refuels">Tankowania</button>
     <button data-section="reports">Raporty</button>
+    <button data-section="drivers">Kierowcy</button>
     <button data-section="invoices">Faktury</button>
     <button data-section="comparison">Porownanie</button>
   </nav>
@@ -43,14 +44,8 @@
     <div class="stat-card red"><div class="stat-label">Koszt lacznie</div><div class="stat-value" id="dash-cost">-</div><div class="stat-unit">PLN</div></div>
   </div>
   <div class="charts-grid">
-    <div class="chart-card">
-      <div class="chart-title">Koszty paliwa - ostatnie 12 miesiecy (PLN)</div>
-      <div class="bar-chart" id="monthly-chart"><div class="loading">Ladowanie...</div></div>
-    </div>
-    <div class="chart-card">
-      <div class="chart-title">Srednie spalanie wg pojazdu (L/100km)</div>
-      <div class="consumption-list" id="consumption-chart"><div class="loading">Ladowanie...</div></div>
-    </div>
+    <div class="chart-card"><div class="chart-title">Koszty paliwa - ostatnie 12 miesiecy (PLN)</div><div class="bar-chart" id="monthly-chart"><div class="loading">Ladowanie...</div></div></div>
+    <div class="chart-card"><div class="chart-title">Srednie spalanie wg pojazdu (L/100km)</div><div class="consumption-list" id="consumption-chart"><div class="loading">Ladowanie...</div></div></div>
   </div>
   <div style="margin-top:20px">
     <div class="chart-card">
@@ -69,7 +64,7 @@
     <div class="section-header"><div class="section-label">Ostatnie tankowania</div></div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Data</th><th>Pojazd</th><th>Paliwo</th><th>Litry</th><th>Cena/L</th><th>Lacznie</th><th>Przebieg</th></tr></thead>
+        <thead><tr><th>Data</th><th>Pojazd</th><th>Paliwo</th><th>Litry</th><th>Cena/L</th><th>Lacznie PLN</th><th>Przebieg</th></tr></thead>
         <tbody id="dash-refuels-table"><tr><td colspan="7"><div class="loading">Ladowanie...</div></td></tr></tbody>
       </table>
     </div>
@@ -98,32 +93,73 @@
     <select id="filter-vehicle"><option value="">Wszystkie pojazdy</option></select>
     <select id="filter-fuel">
       <option value="">Wszystkie paliwa</option>
-      <option>PB95</option><option>PB98</option>
-      <option value="ON">ON (diesel)</option>
-      <option>LPG</option><option>EV</option>
+      <option>PB95</option><option>PB98</option><option value="ON">ON (diesel)</option><option>LPG</option><option>EV</option>
     </select>
     <input type="month" id="filter-month">
   </div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Data</th><th>Pojazd</th><th>Paliwo</th><th>Litry</th><th>Cena/L</th><th>Koszt PLN</th><th>Przebieg</th><th>Spalanie</th><th>Stacja</th><th></th></tr></thead>
-      <tbody id="refuels-table"><tr><td colspan="10"><div class="loading">Ladowanie...</div></td></tr></tbody>
+      <thead><tr><th>Data</th><th>Pojazd</th><th>Kierowca</th><th>Paliwo</th><th>Litry</th><th>Cena/L</th><th>Koszt PLN</th><th>Przebieg</th><th>Spalanie</th><th>Stacja</th><th></th></tr></thead>
+      <tbody id="refuels-table"><tr><td colspan="11"><div class="loading">Ladowanie...</div></td></tr></tbody>
     </table>
   </div>
 </section>
 
 <!-- RAPORTY -->
 <section class="section" id="section-reports">
-  <div class="page-title">Raporty i Analizy</div>
+  <div class="section-header">
+    <div class="page-title" style="margin-bottom:0">Raporty i Analizy</div>
+    <input type="month" id="report-month" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);font-family:var(--sans);font-size:13px;padding:7px 12px;border-radius:6px;outline:none">
+  </div>
   <div class="stats-row" id="report-stats"></div>
+
   <div style="margin-top:8px">
-    <div class="section-header"><div class="section-label">Koszt i spalanie wg pojazdu</div></div>
+    <div class="section-label" style="margin-bottom:12px">Koszt i spalanie wg pojazdu (wszystkie okresy)</div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Pojazd</th><th>Rejestracja</th><th>Tankowania</th><th>Litry lacznie</th><th>Koszt lacznie</th><th>Sr. cena/L</th><th>Sr. spalanie</th><th>Przebieg (zakres)</th></tr></thead>
-        <tbody id="report-table"><tr><td colspan="8"><div class="loading">Ladowanie...</div></td></tr></tbody>
+        <thead><tr><th>Pojazd</th><th>Tankowania</th><th>Litry</th><th>Koszt PLN</th><th>Sr. cena/L</th><th>Sr. spalanie</th><th>Przebieg (zakres)</th></tr></thead>
+        <tbody id="report-table"><tr><td colspan="7"><div class="loading">Ladowanie...</div></td></tr></tbody>
       </table>
     </div>
+  </div>
+
+  <!-- PRZEBIEG MIESIĘCZNY -->
+  <div style="margin-top:24px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="section-label">Przebieg miesięczny per pojazd</div>
+      <select id="mileage-month" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);font-family:var(--sans);font-size:12px;padding:5px 10px;border-radius:6px;outline:none"></select>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Pojazd</th><th>Przebieg start</th><th>Przebieg koniec</th><th style="color:var(--accent)">Km przejechane</th><th>Tankowania</th><th>Litry</th><th>Koszt PLN</th></tr></thead>
+        <tbody id="mileage-table"><tr><td colspan="7"><div class="loading">Ladowanie...</div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- SPALANIE KIEROWCÓW -->
+  <div style="margin-top:24px">
+    <div class="section-label" style="margin-bottom:12px">Spalanie kierowców</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Kierowca</th><th>Tankowania</th><th>Litry</th><th>Koszt PLN</th><th>Sr. spalanie</th><th>Pojazdy</th></tr></thead>
+        <tbody id="driver-stats-table"><tr><td colspan="6"><div class="loading">Ladowanie...</div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- KIEROWCY -->
+<section class="section" id="section-drivers">
+  <div class="section-header">
+    <div class="page-title" style="margin-bottom:0">Kierowcy</div>
+    <button class="btn" id="btn-add-driver">+ Dodaj kierowce</button>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Imie i nazwisko</th><th>Tankowania</th><th>Litry lacznie</th><th>Koszt lacznie</th><th></th></tr></thead>
+      <tbody id="drivers-table"><tr><td colspan="5"><div class="loading">Ladowanie...</div></td></tr></tbody>
+    </table>
   </div>
 </section>
 
@@ -158,7 +194,7 @@
     <div class="table-wrap">
       <table>
         <thead><tr><th>Dostawca</th><th>Litry</th><th>Netto PLN</th><th>Brutto PLN</th></tr></thead>
-        <tbody id="comp-suppliers-table"><tr><td colspan="4"><div class="empty">Brak danych</div></td></tr></tbody>
+        <tbody id="comp-suppliers-table"></tbody>
       </table>
     </div>
   </div>
@@ -176,7 +212,7 @@
           <th style="color:#2ecc71">OSZCZEDNOSC %</th>
         </tr>
       </thead>
-      <tbody id="comp-table"><tr><td colspan="8"><div class="empty">Brak danych</div></td></tr></tbody>
+      <tbody id="comp-table"></tbody>
     </table>
   </div>
 </section>
@@ -189,16 +225,13 @@
     <div class="modal-title" id="modal-vehicle-title">Dodaj pojazd</div>
     <input type="hidden" id="vehicle-edit-id">
     <div class="form-cols">
-      <div class="form-row"><label>Marka i model *</label><input type="text" id="v-name" placeholder="np. Toyota Corolla"></div>
+      <div class="form-row"><label>Marka i model *</label><input type="text" id="v-name" placeholder="np. VW Crafter"></div>
       <div class="form-row"><label>Nr rejestracyjny *</label><input type="text" id="v-plate" placeholder="np. DW 12345"></div>
     </div>
     <div class="form-cols">
       <div class="form-row"><label>Rok produkcji</label><input type="number" id="v-year" placeholder="2020" min="1980" max="2030"></div>
       <div class="form-row"><label>Paliwo</label>
-        <select id="v-fuel">
-          <option value="PB95">PB95</option><option value="PB98">PB98</option>
-          <option value="ON">ON (diesel)</option><option value="LPG">LPG</option><option value="EV">Elektryczny</option>
-        </select>
+        <select id="v-fuel"><option value="ON">ON (diesel)</option><option value="PB95">PB95</option><option value="PB98">PB98</option><option value="LPG">LPG</option><option value="EV">Elektryczny</option></select>
       </div>
     </div>
     <div class="form-cols">
@@ -217,16 +250,14 @@
   <div class="modal">
     <div class="modal-title" id="modal-refuel-title">Dodaj tankowanie</div>
     <input type="hidden" id="refuel-edit-id">
-    <div class="form-row"><label>Pojazd *</label>
-      <select id="r-vehicle"><option value="">— wybierz pojazd —</option></select>
+    <div class="form-cols">
+      <div class="form-row"><label>Pojazd *</label><select id="r-vehicle"><option value="">— wybierz pojazd —</option></select></div>
+      <div class="form-row"><label>Kierowca</label><select id="r-driver"><option value="">— brak kierowcy —</option></select></div>
     </div>
     <div class="form-cols">
       <div class="form-row"><label>Data *</label><input type="date" id="r-date"></div>
       <div class="form-row"><label>Rodzaj paliwa</label>
-        <select id="r-fuel">
-          <option value="PB95">PB95</option><option value="PB98">PB98</option>
-          <option value="ON">ON (diesel)</option><option value="LPG">LPG</option><option value="EV">Prad (kWh)</option>
-        </select>
+        <select id="r-fuel"><option value="ON">ON (diesel)</option><option value="PB95">PB95</option><option value="PB98">PB98</option><option value="LPG">LPG</option><option value="EV">Prad (kWh)</option></select>
       </div>
     </div>
     <div class="form-cols">
@@ -237,7 +268,7 @@
       <div class="form-row"><label>Laczny koszt (PLN)</label><input type="number" id="r-total" placeholder="292.50" step="0.01" min="0"></div>
       <div class="form-row"><label>Przebieg (km)</label><input type="number" id="r-mileage" placeholder="153450"></div>
     </div>
-    <div class="form-row"><label>Stacja paliw</label><input type="text" id="r-station" placeholder="np. Orlen, Shell, BP..."></div>
+    <div class="form-row"><label>Stacja paliw</label><input type="text" id="r-station" placeholder="np. Orlen, Shell, Tankpool..."></div>
     <div class="form-row"><label>Uwagi</label><input type="text" id="r-notes" placeholder="opcjonalnie"></div>
     <div class="modal-actions">
       <button class="btn-ghost" id="btn-cancel-refuel">Anuluj</button>
@@ -246,20 +277,22 @@
   </div>
 </div>
 
-<!-- MODAL: SKANUJ ZDJECIA -->
+<!-- MODAL: SKANUJ -->
 <div class="modal-overlay" id="modal-scan">
   <div class="modal" style="width:520px">
     <div class="modal-title">Skanuj zdjecia z tankowania</div>
-    <div class="form-row">
-      <label>Kraj tankowania</label>
-      <select id="scan-country">
-        <option value="PL">PL - Polska (PLN)</option>
-        <option value="DE" selected>DE - Niemcy (EUR)</option>
-        <option value="NL">NL - Holandia (EUR)</option>
-        <option value="BE">BE - Belgia (EUR)</option>
-        <option value="FR">FR - Francja (EUR)</option>
-        <option value="GB">GB - Wielka Brytania (GBP)</option>
-      </select>
+    <div class="form-cols">
+      <div class="form-row"><label>Kraj tankowania</label>
+        <select id="scan-country">
+          <option value="PL">PL - Polska (PLN)</option>
+          <option value="DE" selected>DE - Niemcy (EUR)</option>
+          <option value="NL">NL - Holandia (EUR)</option>
+          <option value="BE">BE - Belgia (EUR)</option>
+          <option value="FR">FR - Francja (EUR)</option>
+          <option value="GB">GB - Wielka Brytania (GBP)</option>
+        </select>
+      </div>
+      <div class="form-row"><label>Kierowca</label><select id="scan-driver"><option value="">— brak kierowcy —</option></select></div>
     </div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;background:rgba(0,212,200,0.06);border:1px solid rgba(0,212,200,0.2);padding:10px 14px;border-radius:8px">
       <input type="checkbox" id="scan-tankpool" style="width:16px;height:16px;accent-color:var(--accent)">
@@ -272,17 +305,14 @@
       <div class="scan-drop-sub">Licznik + dystrybutor - max 5 zdjec - JPG/PNG</div>
     </div>
     <div class="scan-previews" id="scan-previews"></div>
-    <div class="scan-analyzing" id="scan-analyzing">
-      <div class="spinner"></div>
-      <span>Claude analizuje zdjecia...</span>
-    </div>
+    <div class="scan-analyzing" id="scan-analyzing"><div class="spinner"></div><span>Claude analizuje zdjecia...</span></div>
     <div class="scan-result" id="scan-result">
       <div class="scan-result-title">Sprawdz i popraw odczytane dane</div>
       <div class="scan-fields">
         <div><div class="scan-field-label">Przebieg (km)</div><input type="number" id="sr-mileage" style="width:100%;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:14px;padding:6px 10px;border-radius:6px;outline:none"></div>
         <div><div class="scan-field-label">Litry</div><input type="number" id="sr-liters" step="0.01" style="width:100%;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:14px;padding:6px 10px;border-radius:6px;outline:none"></div>
-        <div><div class="scan-field-label">Cena/L (PLN)</div><input type="number" id="sr-price" step="0.001" placeholder="opcjonalnie" style="width:100%;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:14px;padding:6px 10px;border-radius:6px;outline:none"></div>
-        <div><div class="scan-field-label">Lacznie PLN</div><input type="number" id="sr-total" step="0.01" placeholder="opcjonalnie" style="width:100%;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:14px;padding:6px 10px;border-radius:6px;outline:none"></div>
+        <div><div class="scan-field-label">Cena/L (PLN)</div><input type="number" id="sr-price" step="0.001" style="width:100%;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:14px;padding:6px 10px;border-radius:6px;outline:none"></div>
+        <div><div class="scan-field-label">Lacznie PLN</div><input type="number" id="sr-total" step="0.01" style="width:100%;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:14px;padding:6px 10px;border-radius:6px;outline:none"></div>
         <div><div class="scan-field-label">Paliwo</div>
           <select id="sr-fuel" style="width:100%;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--sans);font-size:13px;padding:6px 10px;border-radius:6px;outline:none">
             <option value="ON">ON (diesel)</option><option value="PB95">PB95</option><option value="PB98">PB98</option><option value="LPG">LPG</option><option value="EV">EV</option>
@@ -314,13 +344,8 @@
     </div>
     <div class="form-cols">
       <div class="form-row"><label>Nr faktury</label><input type="text" id="inv-no" placeholder="opcjonalnie"></div>
-      <div class="form-row">
-        <label>Waluta faktury</label>
-        <select id="inv-currency">
-          <option value="EUR">EUR</option>
-          <option value="PLN">PLN</option>
-          <option value="GBP">GBP</option>
-        </select>
+      <div class="form-row"><label>Waluta faktury</label>
+        <select id="inv-currency"><option value="EUR">EUR</option><option value="PLN">PLN</option><option value="GBP">GBP</option></select>
       </div>
     </div>
     <div class="form-row">
@@ -333,8 +358,7 @@
       <input type="file" id="inv-file" accept=".pdf,.xlsx,.xls,.csv" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--sans);font-size:13px;padding:8px;border-radius:7px;width:100%">
     </div>
     <div id="inv-analyzing" style="display:none;align-items:center;gap:10px;margin:12px 0;color:var(--text2);font-size:13px">
-      <div class="spinner"></div>
-      <span>Claude analizuje fakture...</span>
+      <div class="spinner"></div><span>Claude analizuje fakture...</span>
     </div>
     <div id="inv-result" style="display:none;margin-top:12px">
       <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Odczytane pozycje - sprawdz i popraw</div>
