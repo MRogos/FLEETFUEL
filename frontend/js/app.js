@@ -71,7 +71,6 @@ async function loadDashboard() {
     $('dash-liters').textContent=fmtNum(dash.total_liters,2);
     $('dash-cost').textContent=fmtNum(dash.total_cost,2);
 
-    // Monthly chart
     const chartEl=$('monthly-chart');
     if(!monthly.length){chartEl.innerHTML='<div class="empty"><div>Brak danych</div></div>';}
     else {
@@ -83,7 +82,6 @@ async function loadDashboard() {
       }).join('');
     }
 
-    // Consumption chart
     const consEl=$('consumption-chart');
     const withCons=perVehicle.filter(v=>v.avg_consumption!=null);
     if(!withCons.length){consEl.innerHTML='<div class="empty"><div>Brak danych</div></div>';}
@@ -91,20 +89,19 @@ async function loadDashboard() {
       const maxC=Math.max(...withCons.map(v=>parseFloat(v.avg_consumption)));
       consEl.innerHTML=withCons.map(v=>`
         <div class="cons-row">
-          <div class="cons-name" title="${v.name}">${v.name.split(' ').slice(-1)[0]}</div>
+          <div class="cons-name" title="${v.name}">${v.plate||v.name}</div>
           <div class="cons-bar-bg"><div class="cons-bar-fill" style="width:${(parseFloat(v.avg_consumption)/maxC*100).toFixed(1)}%"></div></div>
           <div class="cons-val">${fmtNum(v.avg_consumption,1)} L</div>
         </div>`).join('');
     }
 
-    // Recent refuels
     const tbody=$('dash-refuels-table');
     const recent=refuels.slice(0,8);
     if(!recent.length){tbody.innerHTML='<tr><td colspan="7"><div class="empty"><div>Brak tankowań</div></div></td></tr>';}
     else tbody.innerHTML=recent.map(r=>`
       <tr>
         <td class="mono">${fmtDate(r.date)}</td>
-        <td><div class="vehicle-name">${r.vehicle_name}</div><div class="vehicle-plate">${r.vehicle_plate}</div></td>
+        <td><div class="vehicle-name">${r.vehicle_plate}</div><div class="vehicle-plate">${r.vehicle_name}</div></td>
         <td>${fuelBadge(r.fuel_type)}</td>
         <td class="mono">${fmtNum(r.liters,2)} L</td>
         <td class="mono">${r.price_per_l?fmtNum(r.price_per_l,3)+' zł':'—'}</td>
@@ -129,7 +126,7 @@ async function loadVehicles() {
       const totalC=v.total_cost||0;
       return `<div class="vehicle-card">
         <div class="vc-header">
-          <div><div class="vc-name">${v.name}</div><div style="color:var(--text3);font-size:11px;margin-top:2px">${v.year||''} ${fuelBadge(v.fuel_type)}</div></div>
+          <div><div class="vc-name">${v.plate}</div><div style="color:var(--text3);font-size:11px;margin-top:2px">${v.name} ${v.year?'· '+v.year:''} ${fuelBadge(v.fuel_type)}</div></div>
           <div class="vc-plate">${v.plate}</div>
         </div>
         <div class="vc-stats">
@@ -177,7 +174,7 @@ async function loadRefuels() {
       if(r.mileage){const idx=vArr.findIndex(x=>x.id===r.id);if(idx>0){const dist=r.mileage-vArr[idx-1].mileage;if(dist>0) cons=parseFloat(r.liters)/dist*100;}}
       return `<tr>
         <td class="mono">${fmtDate(r.date)}</td>
-        <td><div class="vehicle-name" style="font-size:12px">${r.vehicle_name}</div><div class="vehicle-plate">${r.vehicle_plate}</div></td>
+        <td><div class="vehicle-name" style="font-size:13px;font-weight:700">${r.vehicle_plate}</div><div class="vehicle-plate" style="font-size:11px;color:var(--text3)">${r.vehicle_name}</div></td>
         <td>${fuelBadge(r.fuel_type)}</td>
         <td class="mono">${fmtNum(r.liters,2)} L</td>
         <td class="mono">${r.price_per_l?fmtNum(r.price_per_l,3)+' zł':'—'}</td>
@@ -208,7 +205,7 @@ async function loadReports() {
     if(!stats.length){tbody.innerHTML='<tr><td colspan="8"><div class="empty">Brak danych</div></td></tr>';return;}
     tbody.innerHTML=stats.map(v=>`
       <tr>
-        <td><div class="vehicle-name">${v.name}</div></td>
+        <td><div class="vehicle-name">${v.plate}</div><div style="font-size:11px;color:var(--text3)">${v.name}</div></td>
         <td class="mono">${v.plate}</td>
         <td class="mono">${v.refuel_count}</td>
         <td class="mono">${fmtNum(v.total_liters,1)} L</td>
@@ -257,10 +254,10 @@ async function openRefuelModal(id=null) {
   $('refuel-edit-id').value='';
   $('modal-refuel-title').textContent='Dodaj tankowanie';
   $('r-date').value=new Date().toISOString().slice(0,10);
-  $('r-vehicle').value=''; $('r-fuel').value='PB95';
+  $('r-vehicle').value=''; $('r-fuel').value='ON';
   ['r-liters','r-price','r-total','r-mileage','r-station','r-notes'].forEach(f=>$(f).value='');
   if(id){
-    try{const r=await api('GET',`/refuels/${id}`);$('refuel-edit-id').value=r.id;$('modal-refuel-title').textContent='Edytuj tankowanie';$('r-vehicle').value=r.vehicle_id;$('r-date').value=r.date.slice(0,10);$('r-fuel').value=r.fuel_type||'PB95';$('r-liters').value=r.liters;$('r-price').value=r.price_per_l||'';$('r-total').value=r.total||'';$('r-mileage').value=r.mileage||'';$('r-station').value=r.station||'';$('r-notes').value=r.notes||'';}catch(e){showToast('❌ Błąd');return;}
+    try{const r=await api('GET',`/refuels/${id}`);$('refuel-edit-id').value=r.id;$('modal-refuel-title').textContent='Edytuj tankowanie';$('r-vehicle').value=r.vehicle_id;$('r-date').value=r.date.slice(0,10);$('r-fuel').value=r.fuel_type||'ON';$('r-liters').value=r.liters;$('r-price').value=r.price_per_l||'';$('r-total').value=r.total||'';$('r-mileage').value=r.mileage||'';$('r-station').value=r.station||'';$('r-notes').value=r.notes||'';}catch(e){showToast('❌ Błąd');return;}
   }
   $('modal-refuel').classList.add('open');
 }
@@ -289,7 +286,7 @@ async function populateVehicleSelect(selectId, keepAll=false) {
     const vehicles=await api('GET','/vehicles');
     const sel=$(selectId); const cur=sel.value;
     sel.innerHTML=keepAll?'<option value="">Wszystkie pojazdy</option>':'<option value="">— wybierz pojazd —</option>';
-    vehicles.forEach(v=>{const opt=document.createElement('option');opt.value=v.id;opt.textContent=`${v.name} (${v.plate})`;sel.appendChild(opt);});
+    vehicles.forEach(v=>{const opt=document.createElement('option');opt.value=v.id;opt.textContent=`${v.plate} — ${v.name}`;sel.appendChild(opt);});
     if(cur) sel.value=cur;
   }catch(e){}
 }
@@ -303,8 +300,8 @@ async function exportCSV() {
   try{
     const refuels=await api('GET','/refuels');
     if(!refuels.length){showToast('⚠️ Brak danych');return;}
-    const headers=['Data','Pojazd','Rejestracja','Paliwo','Litry','Cena/L','Koszt PLN','Przebieg','Stacja','Uwagi'];
-    const rows=refuels.map(r=>[r.date?.slice(0,10),r.vehicle_name,r.vehicle_plate,r.fuel_type,r.liters,r.price_per_l||'',r.total||'',r.mileage||'',r.station||'',r.notes||'']);
+    const headers=['Data','Rejestracja','Pojazd','Paliwo','Litry','Cena/L','Koszt PLN','Przebieg','Stacja','Uwagi'];
+    const rows=refuels.map(r=>[r.date?.slice(0,10),r.vehicle_plate,r.vehicle_name,r.fuel_type,r.liters,r.price_per_l||'',r.total||'',r.mileage||'',r.station||'',r.notes||'']);
     const csv=[headers,...rows].map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
     const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'})),download:`tankowania_${new Date().toISOString().slice(0,10)}.csv`});
     a.click(); showToast('✅ Eksport gotowy');
@@ -352,7 +349,7 @@ $('btn-analyze').addEventListener('click',async()=>{
     const fd=new FormData();
     scanFiles.forEach(f=>fd.append('images',f));
     fd.append('country',country);
-    fd.append('use_tankpool',useTankpool?'true':'false');  // use_tankpool = karta paliwowa bez ceny
+    fd.append('use_tankpool',useTankpool?'true':'false');
     const res=await fetch('/api/scan',{method:'POST',body:fd});
     const json=await res.json();
     scannedData=json.data||{};
@@ -360,7 +357,6 @@ $('btn-analyze').addEventListener('click',async()=>{
     $('sr-mileage').value=scannedData.mileage||'';
     $('sr-liters').value=scannedData.liters||'';
     $('sr-price').value=scannedData.price_per_l||'';
-    // Auto-oblicz total jesli brak a mamy cene i litry
     const autoTotal = scannedData.total ||
       (scannedData.price_per_l && scannedData.liters
         ? Math.round(scannedData.price_per_l * scannedData.liters * 100) / 100
@@ -420,7 +416,7 @@ async function loadVehicleMonthlyChart() {
           const color=VEHICLE_COLORS[i%VEHICLE_COLORS.length];
           const sn=v.plate||v.vehicle_name||'?';
           const cost=v.total_cost>0?` <span style="color:var(--text3);font-size:10px">${v.total_cost.toFixed(0)} zł</span>`:'';
-          return `<div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;margin-bottom:5px"><div style="font-size:13px;font-weight:700;color:var(--text)">${sn} <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">${v.plate}</span></div><div style="font-family:var(--mono);font-size:13px;font-weight:700;color:${color}">${v.total_liters.toFixed(1)} L${cost}</div></div><div style="height:10px;background:var(--bg3);border-radius:5px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${color};border-radius:5px"></div></div></div>`;
+          return `<div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;margin-bottom:5px"><div style="font-size:13px;font-weight:700;color:var(--text)">${sn}</div><div style="font-family:var(--mono);font-size:13px;font-weight:700;color:${color}">${v.total_liters.toFixed(1)} L${cost}</div></div><div style="height:10px;background:var(--bg3);border-radius:5px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${color};border-radius:5px"></div></div></div>`;
         }).join('');
       }
     }
@@ -440,7 +436,7 @@ async function loadVehicleMonthlyChart() {
       const groupBars=activeVehicles.map((v,vi)=>{
         const val=matrix[v.id][month]||0;
         const h=maxVal>0?Math.max(2,(val/maxVal*100)).toFixed(1):2;
-        return `<div title="${v.name}: ${val.toFixed(1)}L" style="width:20px;height:${h}%;background:${VEHICLE_COLORS[vi%VEHICLE_COLORS.length]};border-radius:2px 2px 0 0;opacity:0.85"></div>`;
+        return `<div title="${v.plate}: ${val.toFixed(1)}L" style="width:20px;height:${h}%;background:${VEHICLE_COLORS[vi%VEHICLE_COLORS.length]};border-radius:2px 2px 0 0;opacity:0.85"></div>`;
       }).join('');
       return `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1"><div style="display:flex;align-items:flex-end;gap:2px;height:100px">${groupBars}</div><div style="font-family:var(--mono);font-size:9px;color:var(--text3)">${label}</div></div>`;
     }).join('');
@@ -530,7 +526,7 @@ async function loadComparison() {
         const savPct=pumpTotal>0?(saving/pumpTotal*100):0;
         const savColor=saving>0?'#2ecc71':saving<0?'#e74c3c':'var(--text3)';
         return `<tr>
-          <td><div class="vehicle-name" style="font-size:12px">${c.vehicle_name||p.vehicle_name||plate}</div></td>
+          <td><div class="vehicle-name" style="font-size:13px">${plate}</div><div style="font-size:11px;color:var(--text3)">${c.vehicle_name||p.vehicle_name||''}</div></td>
           <td class="mono">${plate}</td>
           <td class="mono" style="color:var(--accent)">${c.card_liters?fmtNum(c.card_liters,2)+' L':'—'}</td>
           <td class="mono" style="color:var(--accent)">${cardGross?fmtNum(cardGross,2)+' zł':'—'}</td>
@@ -544,8 +540,7 @@ async function loadComparison() {
   }catch(e){console.error('Comparison:',e);}
 }
 
-
-/* AUTO-KURS NBP (dzien poprzedzajacy) */
+/* AUTO-KURS NBP */
 async function fetchNbpRate(currency) {
   if(!currency || currency === 'PLN') {
     if($('inv-eur')) $('inv-eur').value = '1.0000';
@@ -553,7 +548,6 @@ async function fetchNbpRate(currency) {
     return;
   }
   try {
-    // NBP - ostatni dostepny kurs (dzien poprzedzajacy)
     const res = await fetch('https://api.nbp.pl/api/exchangerates/rates/a/' + currency.toLowerCase() + '/?format=json');
     if(!res.ok) throw new Error('NBP error');
     const data = await res.json();
@@ -567,38 +561,30 @@ async function fetchNbpRate(currency) {
   }
 }
 
-/* ─── INIT: wszystkie event listenery po zaladowaniu DOM ─── */
+/* ─── INIT ─── */
 document.addEventListener('DOMContentLoaded', function() {
 
-  // Nav
   document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>showSection(b.dataset.section)));
 
-  // Logout
   $('btn-logout') && $('btn-logout').addEventListener('click',async()=>{await fetch('/api/auth/logout',{method:'POST'});window.location.href='/login.html';});
 
-  // Vehicle modal
   $('btn-add-vehicle') && $('btn-add-vehicle').addEventListener('click',()=>openVehicleModal());
   $('btn-cancel-vehicle') && $('btn-cancel-vehicle').addEventListener('click',()=>$('modal-vehicle').classList.remove('open'));
   $('btn-save-vehicle') && $('btn-save-vehicle').addEventListener('click',saveVehicle);
 
-  // Refuel modal
   $('btn-add-refuel') && $('btn-add-refuel').addEventListener('click',()=>openRefuelModal());
   $('btn-add-refuel2') && $('btn-add-refuel2').addEventListener('click',()=>openRefuelModal());
   $('btn-cancel-refuel') && $('btn-cancel-refuel').addEventListener('click',()=>$('modal-refuel').classList.remove('open'));
   $('btn-save-refuel') && $('btn-save-refuel').addEventListener('click',saveRefuel);
 
-  // Export
   $('btn-export') && $('btn-export').addEventListener('click',exportCSV);
 
-  // Filters
   $('filter-vehicle') && $('filter-vehicle').addEventListener('change',loadRefuels);
   $('filter-fuel') && $('filter-fuel').addEventListener('change',loadRefuels);
   $('filter-month') && $('filter-month').addEventListener('change',loadRefuels);
 
-  // Scan modal
   $('btn-scan') && $('btn-scan').addEventListener('click',openScanModal);
   $('btn-cancel-scan') && $('btn-cancel-scan').addEventListener('click',()=>{
-    // Pelny reset modalu skanowania
     scanFiles=[]; scannedData=null;
     $('scan-previews').innerHTML='';
     $('scan-result').classList.remove('show');
@@ -613,7 +599,6 @@ document.addEventListener('DOMContentLoaded', function() {
     $('modal-scan').classList.remove('open');
   });
 
-  // Invoice modal
   $('btn-add-invoice') && $('btn-add-invoice').addEventListener('click',()=>{
     invoiceScannedItems=[];
     $('inv-no').value='';
@@ -624,19 +609,16 @@ document.addEventListener('DOMContentLoaded', function() {
     $('btn-analyze-invoice').style.display='';
     $('btn-analyze-invoice').disabled=false;
     $('btn-save-invoice').style.display='none';
-    // Domyslna waluta EUR, kurs z wczoraj
     if($('inv-currency')) $('inv-currency').value='EUR';
     fetchNbpRate('EUR');
     loadSuppliers();
     $('modal-invoice').classList.add('open');
   });
 
-  // Auto-pobierz kurs gdy zmienia sie waluta
   $('inv-currency') && $('inv-currency').addEventListener('change', function() {
     fetchNbpRate(this.value);
   });
 
-  // Gdy zmienia sie dostawca - ustaw domyslna walute i pobierz kurs
   $('inv-supplier') && $('inv-supplier').addEventListener('change', function() {
     const supplierId = parseInt(this.value);
     const supplier = invoiceSuppliers.find(s => s.id === supplierId);
@@ -701,14 +683,11 @@ document.addEventListener('DOMContentLoaded', function() {
     }catch(e){showToast('❌ '+e.message);}
   });
 
-  // Comparison filters
   $('comp-month') && $('comp-month').addEventListener('change',loadComparison);
   $('inv-filter-month') && $('inv-filter-month').addEventListener('change',loadInvoices);
 
-  // Close modals on overlay click
   document.querySelectorAll('.modal-overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o) o.classList.remove('open');}));
 
-  // Init
   updateFleetCount();
   loadDashboard();
 });
