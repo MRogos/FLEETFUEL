@@ -15,9 +15,52 @@ router.get('/comparison', async (req, res, next) => {
   try {
     const { month } = req.query;
     const currentMonth = month || new Date().toISOString().slice(0,7);
-    const { rows: cardData } = await pool.query(`SELECT COALESCE(v.id::text, ii.plate) AS vehicle_key, COALESCE(v.name, ii.plate) AS vehicle_name, COALESCE(v.plate, ii.plate) AS plate, COALESCE(SUM(ii.gross_amount),0)::float AS card_gross, COALESCE(SUM(ii.net_amount),0)::float AS card_net, COALESCE(SUM(ii.liters),0)::float AS card_liters FROM invoice_items ii JOIN invoices i ON i.id = ii.invoice_id LEFT JOIN vehicles v ON v.id = ii.vehicle_id WHERE i.month = $1 GROUP BY vehicle_key, vehicle_name, plate ORDER BY plate`, [currentMonth]);
-    const { rows: pumpData } = await pool.query(`SELECT v.id::text AS vehicle_key, v.name AS vehicle_name, v.plate AS plate, COALESCE(SUM(r.total),0)::float AS pump_total, COALESCE(SUM(r.liters),0)::float AS pump_liters, COUNT(r.id)::int AS refuel_count FROM vehicles v LEFT JOIN refuels r ON r.vehicle_id = v.id AND TO_CHAR(r.date,'YYYY-MM') = $1 GROUP BY v.id, v.name, v.plate ORDER BY v.plate`, [currentMonth]);
-    const { rows: bySupplier } = await pool.query(`SELECT s.name AS supplier_name, s.currency, COALESCE(SUM(ii.gross_amount),0)::float AS total_gross, COALESCE(SUM(ii.net_amount),0)::float AS total_net, COALESCE(SUM(ii.liters),0)::float AS total_liters FROM invoices i JOIN fuel_suppliers s ON s.id = i.supplier_id JOIN invoice_items ii ON ii.invoice_id = i.id WHERE i.month = $1 GROUP BY s.id, s.name, s.currency ORDER BY total_gross DESC`, [currentMonth]);
+
+    const { rows: cardData } = await pool.query(`
+      SELECT
+        COALESCE(v.id::text, ii.plate) AS vehicle_key,
+        COALESCE(v.name, ii.plate) AS vehicle_name,
+        COALESCE(v.plate, ii.plate) AS plate,
+        COALESCE(SUM(ii.gross_amount),0)::float AS card_gross,
+        COALESCE(SUM(ii.net_amount),0)::float AS card_net,
+        COALESCE(SUM(ii.liters),0)::float AS card_liters
+      FROM invoice_items ii
+      JOIN invoices i ON i.id = ii.invoice_id
+      LEFT JOIN vehicles v ON v.id = ii.vehicle_id
+      WHERE i.month = $1
+      GROUP BY v.id, v.name, v.plate, ii.plate
+      ORDER BY COALESCE(v.plate, ii.plate)
+    `, [currentMonth]);
+
+    const { rows: pumpData } = await pool.query(`
+      SELECT
+        v.id::text AS vehicle_key,
+        v.name AS vehicle_name,
+        v.plate AS plate,
+        COALESCE(SUM(r.total),0)::float AS pump_total,
+        COALESCE(SUM(r.liters),0)::float AS pump_liters,
+        COUNT(r.id)::int AS refuel_count
+      FROM vehicles v
+      LEFT JOIN refuels r ON r.vehicle_id = v.id
+        AND TO_CHAR(r.date,'YYYY-MM') = $1
+      GROUP BY v.id, v.name, v.plate
+      ORDER BY v.plate
+    `, [currentMonth]);
+
+    const { rows: bySupplier } = await pool.query(`
+      SELECT
+        s.name AS supplier_name, s.currency,
+        COALESCE(SUM(ii.gross_amount),0)::float AS total_gross,
+        COALESCE(SUM(ii.net_amount),0)::float AS total_net,
+        COALESCE(SUM(ii.liters),0)::float AS total_liters
+      FROM invoices i
+      JOIN fuel_suppliers s ON s.id = i.supplier_id
+      JOIN invoice_items ii ON ii.invoice_id = i.id
+      WHERE i.month = $1
+      GROUP BY s.id, s.name, s.currency
+      ORDER BY total_gross DESC
+    `, [currentMonth]);
+
     const { rows: months } = await pool.query('SELECT DISTINCT month FROM invoices ORDER BY month DESC LIMIT 12');
     res.json({ month: currentMonth, card_data: cardData, pump_data: pumpData, by_supplier: bySupplier, available_months: months.map(m => m.month) });
   } catch(err) { next(err); }
@@ -28,14 +71,30 @@ router.get('/', async (req, res, next) => {
     const { month } = req.query;
     const vals = month ? [month] : [];
     const where = month ? 'WHERE i.month=$1' : '';
-    const { rows } = await pool.query(`SELECT i.*, s.name AS supplier_name, s.currency AS supplier_currency, COUNT(ii.id)::int AS item_count, COALESCE(SUM(ii.gross_amount),0)::float AS total_gross, COALESCE(SUM(ii.net_amount),0)::float AS total_net, COALESCE(SUM(ii.liters),0)::float AS total_liters FROM invoices i JOIN fuel_suppliers s ON s.id = i.supplier_id LEFT JOIN invoice_items ii ON ii.invoice_id = i.id ${where} GROUP BY i.id, s.name, s.currency ORDER BY i.month DESC, s.name`, vals);
+    const { rows } = await pool.query(`
+      SELECT i.*, s.name AS supplier_name, s.currency AS supplier_currency,
+        COUNT(ii.id)::int AS item_count,
+        COALESCE(SUM(ii.gross_amount),0)::float AS total_gross,
+        COALESCE(SUM(ii.net_amount),0)::float AS total_net,
+        COALESCE(SUM(ii.liters),0)::float AS total_liters
+      FROM invoices i
+      JOIN fuel_suppliers s ON s.id = i.supplier_id
+      LEFT JOIN invoice_items ii ON ii.invoice_id = i.id
+      ${where}
+      GROUP BY i.id, s.name, s.currency
+      ORDER BY i.month DESC, s.name
+    `, vals);
     res.json(rows);
   } catch(err) { next(err); }
 });
 
 router.get('/:id/items', async (req, res, next) => {
   try {
-    const { rows } = await pool.query(`SELECT ii.*, v.name AS vehicle_name FROM invoice_items ii LEFT JOIN vehicles v ON v.id = ii.vehicle_id WHERE ii.invoice_id=$1 ORDER BY ii.plate`, [req.params.id]);
+    const { rows } = await pool.query(`
+      SELECT ii.*, v.name AS vehicle_name FROM invoice_items ii
+      LEFT JOIN vehicles v ON v.id = ii.vehicle_id
+      WHERE ii.invoice_id=$1 ORDER BY ii.plate
+    `, [req.params.id]);
     res.json(rows);
   } catch(err) { next(err); }
 });
@@ -67,7 +126,7 @@ router.post('/scan', upload.single('file'), async (req, res, next) => {
         role: 'user',
         content: [...fileContent, {
           type: 'text',
-          text: 'Faktura od dostawcy paliwa: ' + supplier.name + ' (waluta: ' + currency + ').\nTablice rejestracyjne: ' + platesStr + '\n\nWyciagnij dane per pojazd:\n- plate, liters, net_amount w ' + currency + ', gross_amount w ' + currency + ', price_per_l\n\nOdpowiedz TYLKO JSON:\n{"items": [{"plate": "ABC123", "liters": 100.0, "net_amount": 500.0, "gross_amount": 615.0, "price_per_l": 6.15}]}'
+          text: 'Faktura od: ' + supplier.name + ' (waluta: ' + currency + ').\nTablice: ' + platesStr + '\n\nWyciagnij per pojazd: plate, liters, net_amount w ' + currency + ', gross_amount w ' + currency + ', price_per_l\n\nOdpowiedz TYLKO JSON:\n{"items": [{"plate": "ABC123", "liters": 100.0, "net_amount": 500.0, "gross_amount": 615.0, "price_per_l": 6.15}]}'
         }]
       }]
     });
@@ -100,11 +159,15 @@ router.post('/', async (req, res, next) => {
     const conn = await pool.connect();
     try {
       await conn.query('BEGIN');
-      const { rows: inv } = await conn.query('INSERT INTO invoices (supplier_id, invoice_no, month, currency, eur_rate, notes) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *', [supplier_id, invoice_no||null, month, invoice_currency||'EUR', eur_rate||null, notes||null]);
+      const { rows: inv } = await conn.query(
+        'INSERT INTO invoices (supplier_id, invoice_no, month, currency, eur_rate, notes) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+        [supplier_id, invoice_no||null, month, invoice_currency||'EUR', eur_rate||null, notes||null]
+      );
       const invoiceId = inv[0].id;
       for (var i = 0; i < items.length; i++) {
         var item = items[i];
-        await conn.query('INSERT INTO invoice_items (invoice_id, vehicle_id, plate, liters, net_amount, gross_amount, price_per_l) VALUES ($1,$2,$3,$4,$5,$6,$7)', [invoiceId, item.vehicle_id||null, item.plate, item.liters||null, item.net_amount||null, item.gross_amount||null, item.price_per_l||null]);
+        await conn.query('INSERT INTO invoice_items (invoice_id, vehicle_id, plate, liters, net_amount, gross_amount, price_per_l) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+          [invoiceId, item.vehicle_id||null, item.plate, item.liters||null, item.net_amount||null, item.gross_amount||null, item.price_per_l||null]);
       }
       await conn.query('COMMIT');
       res.status(201).json({ ok: true, invoice_id: invoiceId });
