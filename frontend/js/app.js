@@ -102,7 +102,7 @@ async function loadDashboard() {
       <tr>
         <td class="mono">${fmtDate(r.date)}</td>
         <td><div class="vehicle-name">${r.vehicle_plate}</div><div class="vehicle-plate">${r.vehicle_name}</div></td>
-        <td>${fuelBadge(r.fuel_type)}</td>
+        <td>${fuelBadge(r.fuel_type)} ${r.is_full===false?'<span class="badge" style="background:rgba(231,76,60,0.15);color:#e74c3c;font-size:9px">NIEPEŁNE</span>':''}</td>
         <td class="mono">${fmtNum(r.liters,2)} L</td>
         <td class="mono">${r.price_per_l?fmtNum(r.price_per_l,3)+' zł':'—'}</td>
         <td class="mono">${r.total?fmtNum(r.total,2)+' zł':'—'}</td>
@@ -175,7 +175,7 @@ async function loadRefuels() {
         <td class="mono">${fmtDate(r.date)}</td>
         <td><div class="vehicle-name" style="font-size:13px;font-weight:700">${r.vehicle_plate}</div><div class="vehicle-plate" style="font-size:11px;color:var(--text3)">${r.vehicle_name}</div></td>
         <td style="font-size:12px;color:var(--text2)">${r.driver_name||'—'}</td>
-        <td>${fuelBadge(r.fuel_type)}</td>
+        <td>${fuelBadge(r.fuel_type)} ${r.is_full===false?'<span class="badge" style="background:rgba(231,76,60,0.15);color:#e74c3c;font-size:9px">NIEPEŁNE</span>':''}</td>
         <td class="mono">${fmtNum(r.liters,2)} L</td>
         <td class="mono">${r.price_per_l?fmtNum(r.price_per_l,3)+' zł':'—'}</td>
         <td class="mono" style="color:var(--accent)">${r.total?fmtNum(r.total,2)+' zł':'—'}</td>
@@ -372,7 +372,7 @@ async function openRefuelModal(id=null) {
   $('refuel-edit-id').value='';
   $('modal-refuel-title').textContent='Dodaj tankowanie';
   $('r-date').value=new Date().toISOString().slice(0,10);
-  $('r-vehicle').value=''; $('r-fuel').value='ON'; $('r-driver').value='';
+  $('r-vehicle').value=''; $('r-fuel').value='ON'; $('r-driver').value=''; $('r-is-full').checked=true;
   ['r-liters','r-price','r-total','r-mileage','r-station','r-notes'].forEach(f=>$(f).value='');
   if(id){
     try{
@@ -387,6 +387,7 @@ async function openRefuelModal(id=null) {
       $('r-total').value=r.total||'';
       $('r-mileage').value=r.mileage||'';
       $('r-driver').value=r.driver_id||'';
+      $('r-is-full').checked=r.is_full!==false;
       $('r-station').value=r.station||'';
       $('r-notes').value=r.notes||'';
     }catch(e){showToast('❌ Błąd');return;}
@@ -398,8 +399,9 @@ async function saveRefuel() {
   const vehicle_id=parseInt($('r-vehicle').value), date=$('r-date').value, liters=parseFloat($('r-liters').value);
   if(!vehicle_id||!date||isNaN(liters)||liters<=0){showToast('⚠️ Wypełnij wymagane pola');return;}
   const driver_id=parseInt($('r-driver').value)||null;
+  const is_full=$('r-is-full').checked;
   const price_per_l=parseFloat($('r-price').value)||null, total=parseFloat($('r-total').value)||null, mileage=parseInt($('r-mileage').value)||null, editId=$('refuel-edit-id').value;
-  const body={vehicle_id,date,liters,fuel_type:$('r-fuel').value,price_per_l,total,mileage,driver_id,station:$('r-station').value.trim()||null,notes:$('r-notes').value.trim()||null};
+  const body={vehicle_id,date,liters,fuel_type:$('r-fuel').value,price_per_l,total,mileage,driver_id,is_full,station:$('r-station').value.trim()||null,notes:$('r-notes').value.trim()||null};
   try{
     if(editId){await api('PUT',`/refuels/${editId}`,body);showToast('✅ Tankowanie zaktualizowane');}
     else{await api('POST','/refuels',body);showToast('✅ Tankowanie zapisane');}
@@ -523,6 +525,7 @@ $('btn-scan-save').addEventListener('click',async()=>{
   if(mileage>0) body.mileage=mileage;
   if(station) body.station=station;
   if(driverId>0) body.driver_id=driverId;
+  body.is_full=true;
   body.notes='Dodano przez skan zdjęć';
   try{await api('POST','/refuels',body);showToast('✅ Tankowanie zapisane');$('modal-scan').classList.remove('open');loadDashboard();loadRefuels();}
   catch(e){showToast('❌ '+e.message);}
