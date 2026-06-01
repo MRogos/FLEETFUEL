@@ -284,7 +284,7 @@ let allDrivers=[];
 async function loadDriversList() {
   try {
     allDrivers=await api('GET','/drivers')||[];
-    ['r-driver'].forEach(id=>{
+    ['r-driver','scan-driver'].forEach(id=>{
       const sel=$(id); if(!sel) return;
       const cur=sel.value;
       sel.innerHTML='<option value="">— brak kierowcy —</option>';
