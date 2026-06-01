@@ -40,12 +40,12 @@ const getOne = async (req, res, next) => {
 
 const create = async (req, res, next) => {
   try {
-    const { vehicle_id, date, fuel_type, liters, price_per_l, total, mileage, driver_id, station, notes } = req.body;
+    const { vehicle_id, date, fuel_type, liters, price_per_l, total, mileage, driver_id, station, notes, is_full } = req.body;
     const finalTotal = total || (price_per_l && liters ? (price_per_l * liters).toFixed(2) : null);
     const { rows } = await pool.query(
-      `INSERT INTO refuels (vehicle_id, date, fuel_type, liters, price_per_l, total, mileage, driver_id, station, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-      [vehicle_id, date, fuel_type||'PB95', liters, price_per_l||null, finalTotal, mileage||null, driver_id||null, station||null, notes||null]
+      `INSERT INTO refuels (vehicle_id, date, fuel_type, liters, price_per_l, total, mileage, driver_id, station, notes, is_full)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+      [vehicle_id, date, fuel_type||'ON', liters, price_per_l||null, finalTotal, mileage||null, driver_id||null, station||null, notes||null, is_full !== false]
     );
     if (mileage) {
       await pool.query(
@@ -61,7 +61,7 @@ const update = async (req, res, next) => {
   try {
     const fields = [], vals = [];
     let i = 1;
-    const allowed = ['date','fuel_type','liters','price_per_l','total','mileage','driver_id','station','notes'];
+    const allowed = ['date','fuel_type','liters','price_per_l','total','mileage','driver_id','station','notes','is_full'];
     for (const key of allowed) {
       if (req.body[key] !== undefined) { fields.push(`${key}=$${i++}`); vals.push(req.body[key]); }
     }
