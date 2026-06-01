@@ -1,383 +1,54 @@
-<!DOCTYPE html>
-<html lang="pl">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Vipremium Fuel</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Exo+2:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/css/style.css">
-</head>
-<body>
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const session = require('express-session');
+const pgSession = require('connect-pg-simple')(session);
+const path = require('path');
 
-<header>
-  <div class="logo">
-    <img src="/img/logo.png" alt="Vipremium" style="height:30px;object-fit:contain">
-    <span style="color:var(--accent);font-weight:900;letter-spacing:2px;font-size:16px;font-family:var(--sans)">FUEL</span>
-  </div>
-  <nav>
-    <button class="active" data-section="dashboard">Dashboard</button>
-    <button data-section="vehicles">Pojazdy</button>
-    <button data-section="refuels">Tankowania</button>
-    <button data-section="reports">Raporty</button>
-    <button data-section="drivers">Kierowcy</button>
-    <button data-section="invoices">Faktury</button>
-    <button data-section="comparison">Porownanie</button>
-  </nav>
-  <div class="header-right">
-    <span class="fleet-count" id="fleet-count">— POJAZDY</span>
-    <button class="btn-ghost" id="btn-scan" style="font-size:12px">&#128247; Skanuj zdjecia</button>
-    <button class="btn" id="btn-add-refuel">+ Tankowanie</button>
-    <button class="btn-ghost" id="btn-logout" style="font-size:11px;padding:6px 12px">Wyloguj</button>
-  </div>
-</header>
+const { initDB, pool } = require('./db/init');
+const authRouter = require('./routes/auth');
+const vehiclesRouter = require('./routes/vehicles');
+const refuelsRouter = require('./routes/refuels');
+const statsRouter = require('./routes/stats');
+const scanRouter = require('./routes/scan');
+const invoicesRouter = require('./routes/invoices');
+const driversRouter = require('./routes/drivers');
+const requireAuth = require('./middleware/auth');
 
-<div class="container">
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-<!-- DASHBOARD -->
-<section class="section active" id="section-dashboard">
-  <div class="page-title">Przeglad floty</div>
-  <div class="stats-row">
-    <div class="stat-card"><div class="stat-label">Pojazdy</div><div class="stat-value" id="dash-vehicles">-</div><div class="stat-unit">w flocie</div></div>
-    <div class="stat-card green"><div class="stat-label">Tankowania</div><div class="stat-value" id="dash-refuels">-</div><div class="stat-unit">lacznie</div></div>
-    <div class="stat-card blue"><div class="stat-label">Paliwo lacznie</div><div class="stat-value" id="dash-liters">-</div><div class="stat-unit">litrow</div></div>
-    <div class="stat-card red"><div class="stat-label">Koszt lacznie</div><div class="stat-value" id="dash-cost">-</div><div class="stat-unit">PLN</div></div>
-  </div>
-  <div class="charts-grid">
-    <div class="chart-card"><div class="chart-title">Koszty paliwa - ostatnie 12 miesiecy (PLN)</div><div class="bar-chart" id="monthly-chart"><div class="loading">Ladowanie...</div></div></div>
-    <div class="chart-card"><div class="chart-title">Srednie spalanie wg pojazdu (L/100km)</div><div class="consumption-list" id="consumption-chart"><div class="loading">Ladowanie...</div></div></div>
-  </div>
-  <div style="margin-top:20px">
-    <div class="chart-card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-        <div class="chart-title" style="margin-bottom:0">Litry paliwa per pojazd - biezacy miesiac</div>
-        <div id="current-month-label" style="font-family:var(--mono);font-size:11px;color:var(--accent)"></div>
-      </div>
-      <div id="vehicle-monthly-chart"><div class="loading">Ladowanie...</div></div>
-      <div style="margin-top:24px;border-top:1px solid var(--border);padding-top:16px">
-        <div class="chart-title" style="margin-bottom:16px">Porownanie miesieczne - ostatnie 6 miesiecy (litry)</div>
-        <div id="vehicle-history-chart"><div class="loading">Ladowanie...</div></div>
-      </div>
-    </div>
-  </div>
-  <div style="margin-top:24px">
-    <div class="section-header"><div class="section-label">Ostatnie tankowania</div></div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Data</th><th>Pojazd</th><th>Paliwo</th><th>Litry</th><th>Cena/L</th><th>Lacznie PLN</th><th>Przebieg</th></tr></thead>
-        <tbody id="dash-refuels-table"><tr><td colspan="7"><div class="loading">Ladowanie...</div></td></tr></tbody>
-      </table>
-    </div>
-  </div>
-</section>
+app.set('trust proxy', 1);
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use(cors());
+app.use(morgan('dev'));
+app.use(express.json());
 
-<!-- POJAZDY -->
-<section class="section" id="section-vehicles">
-  <div class="section-header">
-    <div class="page-title" style="margin-bottom:0">Flota pojazdow</div>
-    <button class="btn" id="btn-add-vehicle">+ Dodaj pojazd</button>
-  </div>
-  <div class="vehicles-grid" id="vehicles-grid"><div class="loading">Ladowanie...</div></div>
-</section>
+app.use(session({
+  store: new pgSession({ pool, tableName: 'user_sessions', createTableIfMissing: true }),
+  secret: process.env.SESSION_SECRET || 'fleetfuel-secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { secure: process.env.NODE_ENV === 'production', httpOnly: true, maxAge: 1000*60*60*24*7, sameSite: 'lax' }
+}));
 
-<!-- TANKOWANIA -->
-<section class="section" id="section-refuels">
-  <div class="section-header">
-    <div class="page-title" style="margin-bottom:0">Historia tankowan</div>
-    <div style="display:flex;gap:10px">
-      <button class="btn-ghost" id="btn-export">Eksport CSV</button>
-      <button class="btn" id="btn-add-refuel2">+ Tankowanie</button>
-    </div>
-  </div>
-  <div class="filter-bar">
-    <select id="filter-vehicle"><option value="">Wszystkie pojazdy</option></select>
-    <select id="filter-fuel">
-      <option value="">Wszystkie paliwa</option>
-      <option>PB95</option><option>PB98</option><option value="ON">ON (diesel)</option><option>LPG</option><option>EV</option>
-    </select>
-    <input type="month" id="filter-month">
-  </div>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Data</th><th>Pojazd</th><th>Kierowca</th><th>Paliwo</th><th>Litry</th><th>Cena/L</th><th>Koszt PLN</th><th>Przebieg</th><th>Spalanie</th><th>Stacja</th><th></th></tr></thead>
-      <tbody id="refuels-table"><tr><td colspan="11"><div class="loading">Ladowanie...</div></td></tr></tbody>
-    </table>
-  </div>
-</section>
+app.use('/api/auth', authRouter);
+app.use(express.static(path.join(__dirname, '../../frontend')));
+app.use(requireAuth);
+app.use('/api/vehicles', vehiclesRouter);
+app.use('/api/refuels', refuelsRouter);
+app.use('/api/stats', statsRouter);
+app.use('/api/scan', scanRouter);
+app.use('/api/invoices', invoicesRouter);
+app.use('/api/drivers', driversRouter);
 
-<!-- RAPORTY -->
-<section class="section" id="section-reports">
-  <div class="section-header">
-    <div class="page-title" style="margin-bottom:0">Raporty i Analizy</div>
-    <input type="month" id="report-month" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);font-family:var(--sans);font-size:13px;padding:7px 12px;border-radius:6px;outline:none">
-  </div>
-  <div class="stats-row" id="report-stats"></div>
+app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+app.get('*', (req, res) => res.sendFile(path.join(__dirname, '../../frontend/index.html')));
+app.use((err, req, res, next) => { console.error(err.stack); res.status(500).json({ error: 'Internal server error' }); });
 
-  <div style="margin-top:8px">
-    <div class="section-label" style="margin-bottom:12px">Koszt i spalanie wg pojazdu (wszystkie okresy)</div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Pojazd</th><th>Tankowania</th><th>Litry</th><th>Koszt PLN</th><th>Sr. cena/L</th><th>Sr. spalanie</th><th>Przebieg (zakres)</th></tr></thead>
-        <tbody id="report-table"><tr><td colspan="7"><div class="loading">Ladowanie...</div></td></tr></tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- PRZEBIEG MIESIĘCZNY -->
-  <div style="margin-top:24px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <div class="section-label">Przebieg miesięczny per pojazd</div>
-      <select id="mileage-month" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);font-family:var(--sans);font-size:12px;padding:5px 10px;border-radius:6px;outline:none"></select>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Pojazd</th><th>Przebieg start</th><th>Przebieg koniec</th><th style="color:var(--accent)">Km przejechane</th><th>Tankowania</th><th>Litry</th><th>Koszt PLN</th></tr></thead>
-        <tbody id="mileage-table"><tr><td colspan="7"><div class="loading">Ladowanie...</div></td></tr></tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- SPALANIE KIEROWCÓW -->
-  <div style="margin-top:24px">
-    <div class="section-label" style="margin-bottom:12px">Spalanie kierowców</div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Kierowca</th><th>Tankowania</th><th>Litry</th><th>Koszt PLN</th><th>Sr. spalanie</th><th>Pojazdy</th></tr></thead>
-        <tbody id="driver-stats-table"><tr><td colspan="6"><div class="loading">Ladowanie...</div></td></tr></tbody>
-      </table>
-    </div>
-  </div>
-</section>
-
-<!-- KIEROWCY -->
-<section class="section" id="section-drivers">
-  <div class="section-header">
-    <div class="page-title" style="margin-bottom:0">Kierowcy</div>
-    <button class="btn" id="btn-add-driver">+ Dodaj kierowce</button>
-  </div>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Imie i nazwisko</th><th>Tankowania</th><th>Litry lacznie</th><th>Koszt lacznie</th><th></th></tr></thead>
-      <tbody id="drivers-table"><tr><td colspan="5"><div class="loading">Ladowanie...</div></td></tr></tbody>
-    </table>
-  </div>
-</section>
-
-<!-- FAKTURY -->
-<section class="section" id="section-invoices">
-  <div class="section-header">
-    <div class="page-title" style="margin-bottom:0">Faktury paliwowe</div>
-    <button class="btn" id="btn-add-invoice">+ Wgraj fakture</button>
-  </div>
-  <div class="filter-bar">
-    <select id="inv-filter-month"><option value="">Wszystkie miesiace</option></select>
-  </div>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Miesiac</th><th>Dostawca</th><th>Nr faktury</th><th>Pozycje</th><th>Litry</th><th>Netto PLN</th><th>Brutto PLN</th><th></th></tr></thead>
-      <tbody id="invoices-table"><tr><td colspan="8"><div class="loading">Ladowanie...</div></td></tr></tbody>
-    </table>
-  </div>
-</section>
-
-<!-- POROWNANIE -->
-<section class="section" id="section-comparison">
-  <div class="section-header">
-    <div class="page-title" style="margin-bottom:0">Karta vs Dystrybutor</div>
-    <select id="comp-month" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);font-family:var(--sans);font-size:13px;padding:7px 12px;border-radius:6px;outline:none">
-      <option value="">Biezacy miesiac</option>
-    </select>
-  </div>
-  <div class="stats-row" id="comp-stats" style="margin-bottom:20px"></div>
-  <div style="margin-bottom:20px">
-    <div class="section-label" style="margin-bottom:12px">Koszty per dostawca</div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Dostawca</th><th>Litry</th><th>Netto PLN</th><th>Brutto PLN</th></tr></thead>
-        <tbody id="comp-suppliers-table"></tbody>
-      </table>
-    </div>
-  </div>
-  <div class="section-label" style="margin-bottom:12px">Porownanie per pojazd</div>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Pojazd</th><th>Rejestracja</th>
-          <th style="color:var(--accent)">KARTA litry</th>
-          <th style="color:var(--accent)">KARTA brutto PLN</th>
-          <th style="color:#3498db">DYSTRYB. litry</th>
-          <th style="color:#3498db">DYSTRYB. PLN</th>
-          <th style="color:#2ecc71">OSZCZEDNOSC PLN</th>
-          <th style="color:#2ecc71">OSZCZEDNOSC %</th>
-        </tr>
-      </thead>
-      <tbody id="comp-table"></tbody>
-    </table>
-  </div>
-</section>
-
-</div>
-
-<!-- MODAL: POJAZD -->
-<div class="modal-overlay" id="modal-vehicle">
-  <div class="modal">
-    <div class="modal-title" id="modal-vehicle-title">Dodaj pojazd</div>
-    <input type="hidden" id="vehicle-edit-id">
-    <div class="form-cols">
-      <div class="form-row"><label>Marka i model *</label><input type="text" id="v-name" placeholder="np. VW Crafter"></div>
-      <div class="form-row"><label>Nr rejestracyjny *</label><input type="text" id="v-plate" placeholder="np. DW 12345"></div>
-    </div>
-    <div class="form-cols">
-      <div class="form-row"><label>Rok produkcji</label><input type="number" id="v-year" placeholder="2020" min="1980" max="2030"></div>
-      <div class="form-row"><label>Paliwo</label>
-        <select id="v-fuel"><option value="ON">ON (diesel)</option><option value="PB95">PB95</option><option value="PB98">PB98</option><option value="LPG">LPG</option><option value="EV">Elektryczny</option></select>
-      </div>
-    </div>
-    <div class="form-cols">
-      <div class="form-row"><label>Przebieg (km)</label><input type="number" id="v-mileage" placeholder="150000"></div>
-      <div class="form-row"><label>VIN / numer boczny</label><input type="text" id="v-vin" placeholder="opcjonalnie"></div>
-    </div>
-    <div class="modal-actions">
-      <button class="btn-ghost" id="btn-cancel-vehicle">Anuluj</button>
-      <button class="btn" id="btn-save-vehicle">Zapisz pojazd</button>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL: TANKOWANIE -->
-<div class="modal-overlay" id="modal-refuel">
-  <div class="modal">
-    <div class="modal-title" id="modal-refuel-title">Dodaj tankowanie</div>
-    <input type="hidden" id="refuel-edit-id">
-    <div class="form-cols">
-      <div class="form-row"><label>Pojazd *</label><select id="r-vehicle"><option value="">— wybierz pojazd —</option></select></div>
-      <div class="form-row"><label>Kierowca</label><select id="r-driver"><option value="">— brak kierowcy —</option></select></div>
-    </div>
-    <div class="form-cols">
-      <div class="form-row"><label>Data *</label><input type="date" id="r-date"></div>
-      <div class="form-row"><label>Rodzaj paliwa</label>
-        <select id="r-fuel"><option value="ON">ON (diesel)</option><option value="PB95">PB95</option><option value="PB98">PB98</option><option value="LPG">LPG</option><option value="EV">Prad (kWh)</option></select>
-      </div>
-    </div>
-    <div class="form-cols">
-      <div class="form-row"><label>Ilosc (litry) *</label><input type="number" id="r-liters" placeholder="45.00" step="0.01" min="0"></div>
-      <div class="form-row"><label>Cena za litr (PLN)</label><input type="number" id="r-price" placeholder="6.50" step="0.001" min="0"></div>
-    </div>
-    <div class="form-cols">
-      <div class="form-row"><label>Laczny koszt (PLN)</label><input type="number" id="r-total" placeholder="292.50" step="0.01" min="0"></div>
-      <div class="form-row"><label>Przebieg (km)</label><input type="number" id="r-mileage" placeholder="153450"></div>
-    </div>
-    <div class="form-row"><label>Stacja paliw</label><input type="text" id="r-station" placeholder="np. Orlen, Shell, Tankpool..."></div>
-    <div class="form-row"><label>Uwagi</label><input type="text" id="r-notes" placeholder="opcjonalnie"></div>
-    <div class="modal-actions">
-      <button class="btn-ghost" id="btn-cancel-refuel">Anuluj</button>
-      <button class="btn" id="btn-save-refuel">Zapisz tankowanie</button>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL: SKANUJ -->
-<div class="modal-overlay" id="modal-scan">
-  <div class="modal" style="width:520px">
-    <div class="modal-title">Skanuj zdjecia z tankowania</div>
-    <div class="form-cols">
-      <div class="form-row"><label>Kraj tankowania</label>
-        <select id="scan-country">
-          <option value="PL">PL - Polska (PLN)</option>
-          <option value="DE" selected>DE - Niemcy (EUR)</option>
-          <option value="NL">NL - Holandia (EUR)</option>
-          <option value="BE">BE - Belgia (EUR)</option>
-          <option value="FR">FR - Francja (EUR)</option>
-          <option value="GB">GB - Wielka Brytania (GBP)</option>
-        </select>
-      </div>
-      <div class="form-row"><label>Kierowca</label><select id="scan-driver"><option value="">— brak kierowcy —</option></select></div>
-    </div>
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;background:rgba(0,212,200,0.06);border:1px solid rgba(0,212,200,0.2);padding:10px 14px;border-radius:8px">
-      <input type="checkbox" id="scan-tankpool" style="width:16px;height:16px;accent-color:var(--accent)">
-      <label for="scan-tankpool" style="font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;letter-spacing:0;text-transform:none">Karta paliwowa (brak ceny na dystrybutorze) - pobierz cene automatycznie</label>
-    </div>
-    <div class="scan-drop" id="scan-drop">
-      <input type="file" id="scan-input" accept="image/*" multiple style="display:none">
-      <div class="scan-drop-icon">&#128444;</div>
-      <div class="scan-drop-text">Przeciagnij zdjecia lub kliknij aby wybrac</div>
-      <div class="scan-drop-sub">Licznik + dystrybutor - max 5 zdjec - JPG/PNG</div>
-    </div>
-    <div class="scan-previews" id="scan-previews"></div>
-    <div class="scan-analyzing" id="scan-analyzing"><div class="spinner"></div><span>Claude analizuje zdjecia...</span></div>
-    <div class="scan-result" id="scan-result">
-      <div class="scan-result-title">Sprawdz i popraw odczytane dane</div>
-      <div class="scan-fields">
-        <div><div class="scan-field-label">Przebieg (km)</div><input type="number" id="sr-mileage" style="width:100%;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:14px;padding:6px 10px;border-radius:6px;outline:none"></div>
-        <div><div class="scan-field-label">Litry</div><input type="number" id="sr-liters" step="0.01" style="width:100%;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:14px;padding:6px 10px;border-radius:6px;outline:none"></div>
-        <div><div class="scan-field-label">Cena/L (PLN)</div><input type="number" id="sr-price" step="0.001" style="width:100%;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:14px;padding:6px 10px;border-radius:6px;outline:none"></div>
-        <div><div class="scan-field-label">Lacznie PLN</div><input type="number" id="sr-total" step="0.01" style="width:100%;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:14px;padding:6px 10px;border-radius:6px;outline:none"></div>
-        <div><div class="scan-field-label">Paliwo</div>
-          <select id="sr-fuel" style="width:100%;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--sans);font-size:13px;padding:6px 10px;border-radius:6px;outline:none">
-            <option value="ON">ON (diesel)</option><option value="PB95">PB95</option><option value="PB98">PB98</option><option value="LPG">LPG</option><option value="EV">EV</option>
-          </select>
-        </div>
-        <div><div class="scan-field-label">Stacja</div><input type="text" id="sr-station" style="width:100%;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--sans);font-size:13px;padding:6px 10px;border-radius:6px;outline:none"></div>
-      </div>
-    </div>
-    <div id="sr-rate-info" style="display:none;font-family:var(--mono);font-size:11px;color:var(--accent);background:rgba(0,212,200,0.08);border:1px solid rgba(0,212,200,0.2);padding:8px 12px;border-radius:6px;margin-top:12px"></div>
-    <div class="form-row" id="scan-vehicle-row" style="margin-top:16px;display:none">
-      <label>Wybierz pojazd *</label>
-      <select id="scan-vehicle"><option value="">— wybierz pojazd —</option></select>
-    </div>
-    <div class="modal-actions">
-      <button class="btn-ghost" id="btn-cancel-scan">Anuluj</button>
-      <button class="btn" id="btn-analyze" disabled>Analizuj zdjecia</button>
-      <button class="btn" id="btn-scan-save" style="display:none">Zapisz tankowanie</button>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL: FAKTURA -->
-<div class="modal-overlay" id="modal-invoice">
-  <div class="modal" style="width:560px">
-    <div class="modal-title">Wgraj fakture paliwowa</div>
-    <div class="form-cols">
-      <div class="form-row"><label>Dostawca *</label><select id="inv-supplier"><option value="">-- wybierz --</option></select></div>
-      <div class="form-row"><label>Miesiac *</label><input type="month" id="inv-month"></div>
-    </div>
-    <div class="form-cols">
-      <div class="form-row"><label>Nr faktury</label><input type="text" id="inv-no" placeholder="opcjonalnie"></div>
-      <div class="form-row"><label>Waluta faktury</label>
-        <select id="inv-currency"><option value="EUR">EUR</option><option value="PLN">PLN</option><option value="GBP">GBP</option></select>
-      </div>
-    </div>
-    <div class="form-row">
-      <label id="inv-eur-label">Kurs EUR/PLN (NBP dzien poprzedzajacy)</label>
-      <input type="number" id="inv-eur" placeholder="4.25" step="0.0001" value="4.25">
-      <div style="font-size:10px;color:var(--text3);margin-top:4px">Pobierany automatycznie z NBP. Mozesz recznie poprawic.</div>
-    </div>
-    <div class="form-row">
-      <label>Plik faktury (PDF lub Excel) *</label>
-      <input type="file" id="inv-file" accept=".pdf,.xlsx,.xls,.csv" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--sans);font-size:13px;padding:8px;border-radius:7px;width:100%">
-    </div>
-    <div id="inv-analyzing" style="display:none;align-items:center;gap:10px;margin:12px 0;color:var(--text2);font-size:13px">
-      <div class="spinner"></div><span>Claude analizuje fakture...</span>
-    </div>
-    <div id="inv-result" style="display:none;margin-top:12px">
-      <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Odczytane pozycje - sprawdz i popraw</div>
-      <div class="table-wrap" style="max-height:280px;overflow-y:auto">
-        <table>
-          <thead><tr><th>Tablica</th><th>Litry</th><th>Netto PLN</th><th>Brutto PLN</th><th>Pojazd</th></tr></thead>
-          <tbody id="inv-items-table"></tbody>
-        </table>
-      </div>
-    </div>
-    <div class="modal-actions">
-      <button class="btn-ghost" id="btn-cancel-invoice">Anuluj</button>
-      <button class="btn" id="btn-analyze-invoice">Analizuj fakture</button>
-      <button class="btn" id="btn-save-invoice" style="display:none;background:#2ecc71;color:#000">Zapisz fakture</button>
-    </div>
-  </div>
-</div>
-
-<div class="toast" id="toast"></div>
-<script src="/js/app.js"></script>
-</body>
-</html>
+(async () => {
+  await initDB();
+  app.listen(PORT, () => console.log(`🚀 FleetFuel running on port ${PORT}`));
+})();
