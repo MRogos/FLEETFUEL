@@ -9,12 +9,21 @@ async function initDB() {
   const client = await pool.connect();
   try {
     await client.query(`
+      -- Kolejnosc ma znaczenie: drivers PRZED refuels
+
+      CREATE TABLE IF NOT EXISTS drivers (
+        id          SERIAL PRIMARY KEY,
+        name        VARCHAR(100) NOT NULL,
+        active      BOOLEAN DEFAULT true,
+        created_at  TIMESTAMPTZ DEFAULT NOW()
+      );
+
       CREATE TABLE IF NOT EXISTS vehicles (
         id          SERIAL PRIMARY KEY,
         name        VARCHAR(100) NOT NULL,
         plate       VARCHAR(20)  NOT NULL UNIQUE,
         year        INTEGER,
-        fuel_type   VARCHAR(10)  DEFAULT 'PB95',
+        fuel_type   VARCHAR(10)  DEFAULT 'ON',
         mileage     INTEGER      DEFAULT 0,
         vin         VARCHAR(50),
         created_at  TIMESTAMPTZ  DEFAULT NOW()
@@ -25,7 +34,7 @@ async function initDB() {
         vehicle_id    INTEGER NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
         driver_id     INTEGER REFERENCES drivers(id) ON DELETE SET NULL,
         date          DATE    NOT NULL,
-        fuel_type     VARCHAR(10) DEFAULT 'PB95',
+        fuel_type     VARCHAR(10) DEFAULT 'ON',
         liters        NUMERIC(8,3) NOT NULL,
         price_per_l   NUMERIC(8,4),
         total         NUMERIC(10,2),
@@ -35,18 +44,6 @@ async function initDB() {
         created_at    TIMESTAMPTZ DEFAULT NOW()
       );
 
-      CREATE TABLE IF NOT EXISTS drivers (
-        id          SERIAL PRIMARY KEY,
-        name        VARCHAR(100) NOT NULL,
-        active      BOOLEAN DEFAULT true,
-        created_at  TIMESTAMPTZ DEFAULT NOW()
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_refuels_vehicle_id ON refuels(vehicle_id);
-      CREATE INDEX IF NOT EXISTS idx_refuels_date ON refuels(date);
-      CREATE INDEX IF NOT EXISTS idx_refuels_driver_id ON refuels(driver_id);
-
-      -- Tabele faktur
       CREATE TABLE IF NOT EXISTS fuel_suppliers (
         id          SERIAL PRIMARY KEY,
         name        VARCHAR(50) NOT NULL,
@@ -80,9 +77,21 @@ async function initDB() {
         created_at    TIMESTAMPTZ DEFAULT NOW()
       );
 
+      CREATE TABLE IF NOT EXISTS user_sessions (
+        sid    VARCHAR NOT NULL COLLATE "default",
+        sess   JSON    NOT NULL,
+        expire TIMESTAMP(6) NOT NULL,
+        CONSTRAINT session_pkey PRIMARY KEY (sid) NOT DEFERRABLE INITIALLY IMMEDIATE
+      );
+
+      -- Indeksy
+      CREATE INDEX IF NOT EXISTS idx_refuels_vehicle_id ON refuels(vehicle_id);
+      CREATE INDEX IF NOT EXISTS idx_refuels_date ON refuels(date);
+      CREATE INDEX IF NOT EXISTS idx_refuels_driver_id ON refuels(driver_id);
       CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice ON invoice_items(invoice_id);
       CREATE INDEX IF NOT EXISTS idx_invoice_items_vehicle ON invoice_items(vehicle_id);
       CREATE INDEX IF NOT EXISTS idx_invoices_month ON invoices(month);
+      CREATE INDEX IF NOT EXISTS IDX_session_expire ON user_sessions(expire);
 
       -- Domyslni dostawcy
       INSERT INTO fuel_suppliers (name, country, currency)
@@ -95,7 +104,7 @@ async function initDB() {
         ) AS v(name, country, currency)
       WHERE NOT EXISTS (SELECT 1 FROM fuel_suppliers LIMIT 1);
 
-      -- Migracje
+      -- Migracje dla istniejacych baz
       DO $$ BEGIN
         ALTER TABLE invoices ADD COLUMN IF NOT EXISTS currency VARCHAR(5) DEFAULT 'EUR';
       EXCEPTION WHEN duplicate_column THEN NULL;
@@ -105,14 +114,6 @@ async function initDB() {
         ALTER TABLE refuels ADD COLUMN IF NOT EXISTS driver_id INTEGER REFERENCES drivers(id) ON DELETE SET NULL;
       EXCEPTION WHEN duplicate_column THEN NULL;
       END $$;
-
-      CREATE TABLE IF NOT EXISTS user_sessions (
-        sid    VARCHAR NOT NULL COLLATE "default",
-        sess   JSON    NOT NULL,
-        expire TIMESTAMP(6) NOT NULL,
-        CONSTRAINT session_pkey PRIMARY KEY (sid) NOT DEFERRABLE INITIALLY IMMEDIATE
-      );
-      CREATE INDEX IF NOT EXISTS IDX_session_expire ON user_sessions (expire);
     `);
     console.log('✅ Database initialized');
   } finally {
