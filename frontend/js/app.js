@@ -506,6 +506,7 @@ $('btn-analyze').addEventListener('click',async()=>{
     }
     $('scan-result').classList.add('show');
     $('scan-vehicle-row').style.display='';
+    $('scan-is-full-row').style.display='flex';
     $('btn-scan-save').style.display='';
     $('btn-analyze').style.display='none';
   }catch(e){showToast('❌ Błąd analizy: '+e.message);$('btn-analyze').disabled=false;}
@@ -525,7 +526,7 @@ $('btn-scan-save').addEventListener('click',async()=>{
   if(mileage>0) body.mileage=mileage;
   if(station) body.station=station;
   if(driverId>0) body.driver_id=driverId;
-  body.is_full=true;
+  body.is_full=$('scan-is-full')?$('scan-is-full').checked:true;
   body.notes='Dodano przez skan zdjęć';
   try{await api('POST','/refuels',body);showToast('✅ Tankowanie zapisane');$('modal-scan').classList.remove('open');loadDashboard();loadRefuels();}
   catch(e){showToast('❌ '+e.message);}
@@ -709,11 +710,13 @@ document.addEventListener('DOMContentLoaded', function() {
     $('scan-result').classList.remove('show');
     $('scan-analyzing').classList.remove('show');
     $('scan-vehicle-row').style.display='none';
+    if($('scan-is-full-row')) $('scan-is-full-row').style.display='none';
     $('btn-analyze').style.display='';
     $('btn-analyze').disabled=true;
     $('btn-scan-save').style.display='none';
     $('scan-input').value='';
     $('scan-tankpool').checked=false;
+    if($('scan-is-full')) $('scan-is-full').checked=true;
     const ri=$('sr-rate-info'); if(ri) ri.style.display='none';
     $('modal-scan').classList.remove('open');
   });
