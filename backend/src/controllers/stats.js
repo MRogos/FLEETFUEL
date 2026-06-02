@@ -50,14 +50,16 @@ const perVehicle = async (req, res, next) => {
     `);
     for (const row of rows) {
       const { rows: vr } = await pool.query(
-        'SELECT liters, mileage FROM refuels WHERE vehicle_id=$1 AND mileage IS NOT NULL AND is_full IS NOT FALSE ORDER BY mileage',
+        'SELECT liters, mileage, is_full FROM refuels WHERE vehicle_id=$1 AND mileage IS NOT NULL ORDER BY mileage',
         [row.id]
       );
       if (vr.length >= 2) {
         const segs = [];
         for (let i = 1; i < vr.length; i++) {
+          // Oba tankowania musza byc pelne
+          if (vr[i].is_full === false || vr[i-1].is_full === false) continue;
           const dist = vr[i].mileage - vr[i-1].mileage;
-          if (dist > 0) segs.push(parseFloat(vr[i].liters) / dist * 100);
+          if (dist > 0 && dist < 5000) segs.push(parseFloat(vr[i].liters) / dist * 100);
         }
         row.avg_consumption = segs.length ? (segs.reduce((a,b)=>a+b)/segs.length).toFixed(2) : null;
       } else { row.avg_consumption = null; }
@@ -129,7 +131,7 @@ const perDriver = async (req, res, next) => {
       const { rows: vr } = await pool.query(`
         SELECT r.liters, r.mileage, r.vehicle_id
         FROM refuels r
-        WHERE r.driver_id = $1 AND r.mileage IS NOT NULL AND r.is_full IS NOT FALSE
+        WHERE r.driver_id = $1 AND r.mileage IS NOT NULL
         ORDER BY r.vehicle_id, r.mileage
       `, [row.id]);
 
@@ -139,8 +141,10 @@ const perDriver = async (req, res, next) => {
       const segs = [];
       Object.values(byVehicle).forEach(arr => {
         for (let i = 1; i < arr.length; i++) {
+          // Oba musza byc pelne
+          if (arr[i].is_full === false || arr[i-1].is_full === false) continue;
           const dist = arr[i].mileage - arr[i-1].mileage;
-          if (dist > 0) segs.push(parseFloat(arr[i].liters) / dist * 100);
+          if (dist > 0 && dist < 5000) segs.push(parseFloat(arr[i].liters) / dist * 100);
         }
       });
       row.avg_consumption = segs.length ? (segs.reduce((a,b)=>a+b)/segs.length).toFixed(2) : null;
