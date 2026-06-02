@@ -50,14 +50,17 @@ const perVehicle = async (req, res, next) => {
     `);
     for (const row of rows) {
       const { rows: vr } = await pool.query(
-        'SELECT liters, mileage, is_full FROM refuels WHERE vehicle_id=$1 AND mileage IS NOT NULL ORDER BY mileage',
+        'SELECT liters, mileage, is_full FROM refuels WHERE vehicle_id=$1 AND mileage IS NOT NULL ORDER BY date, mileage',
         [row.id]
       );
       if (vr.length >= 2) {
         const segs = [];
         for (let i = 1; i < vr.length; i++) {
-          // Oba tankowania musza byc pelne
+          // Jezeli KTREKOLWIEK z pary jest niepelne - pomijamy segment
           if (vr[i].is_full === false || vr[i-1].is_full === false) continue;
+          // Sprawdz czy miedzy nimi nie bylo niepelnego
+          const hasPartialBetween = vr.slice(i-1+1, i).some(x => x.is_full === false);
+          if (hasPartialBetween) continue;
           const dist = vr[i].mileage - vr[i-1].mileage;
           if (dist > 0 && dist < 5000) segs.push(parseFloat(vr[i].liters) / dist * 100);
         }
@@ -129,7 +132,7 @@ const perDriver = async (req, res, next) => {
     // Avg consumption per driver
     for (const row of rows) {
       const { rows: vr } = await pool.query(`
-        SELECT r.liters, r.mileage, r.vehicle_id
+        SELECT r.liters, r.mileage, r.vehicle_id, r.is_full
         FROM refuels r
         WHERE r.driver_id = $1 AND r.mileage IS NOT NULL
         ORDER BY r.vehicle_id, r.mileage
@@ -141,8 +144,11 @@ const perDriver = async (req, res, next) => {
       const segs = [];
       Object.values(byVehicle).forEach(arr => {
         for (let i = 1; i < arr.length; i++) {
-          // Oba musza byc pelne
+          // Jezeli ktorekolwiek z pary jest niepelne - pomijamy segment
           if (arr[i].is_full === false || arr[i-1].is_full === false) continue;
+          // Sprawdz czy miedzy nimi nie bylo niepelnego
+          const hasPartialBetween = arr.slice(i-1+1, i).some(x => x.is_full === false);
+          if (hasPartialBetween) continue;
           const dist = arr[i].mileage - arr[i-1].mileage;
           if (dist > 0 && dist < 5000) segs.push(parseFloat(arr[i].liters) / dist * 100);
         }
