@@ -50,7 +50,7 @@ const perVehicle = async (req, res, next) => {
     `);
     for (const row of rows) {
       const { rows: vr } = await pool.query(
-        'SELECT liters, mileage FROM refuels WHERE vehicle_id=$1 AND mileage IS NOT NULL ORDER BY mileage',
+        'SELECT liters, mileage FROM refuels WHERE vehicle_id=$1 AND mileage IS NOT NULL AND is_full IS NOT FALSE ORDER BY mileage',
         [row.id]
       );
       if (vr.length >= 2) {
@@ -129,7 +129,7 @@ const perDriver = async (req, res, next) => {
       const { rows: vr } = await pool.query(`
         SELECT r.liters, r.mileage, r.vehicle_id
         FROM refuels r
-        WHERE r.driver_id = $1 AND r.mileage IS NOT NULL
+        WHERE r.driver_id = $1 AND r.mileage IS NOT NULL AND r.is_full IS NOT FALSE
         ORDER BY r.vehicle_id, r.mileage
       `, [row.id]);
 
