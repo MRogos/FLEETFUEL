@@ -168,10 +168,25 @@ async function loadRefuels() {
     const byVehicle={};
     refuels.forEach(r=>{(byVehicle[r.vehicle_id]=byVehicle[r.vehicle_id]||[]).push(r);});
     tbody.innerHTML=refuels.map(r=>{
-      // Tylko pelne tankowania z przebiegiem do obliczen spalania
-      const vArr=(byVehicle[r.vehicle_id]||[]).filter(x=>x.mileage&&x.is_full!==false).sort((a,b)=>a.mileage-b.mileage);
+      // Wszystkie tankowania z przebiegiem posortowane - do sprawdzania ciagolosci
+      const vArr=(byVehicle[r.vehicle_id]||[]).filter(x=>x.mileage).sort((a,b)=>a.mileage-b.mileage);
       let cons=null;
-      if(r.mileage&&r.is_full!==false){const idx=vArr.findIndex(x=>x.id===r.id);if(idx>0){const prev=vArr[idx-1];const dist=r.mileage-prev.mileage;if(dist>0&&dist<5000) cons=parseFloat(r.liters)/dist*100;}}
+      if(r.mileage&&r.is_full!==false){
+        const idx=vArr.findIndex(x=>x.id===r.id);
+        if(idx>0){
+          const prev=vArr[idx-1];
+          // Poprzednie musi byc pelne
+          if(prev.is_full!==false){
+            // Miedzy poprzednim a biezacym nie moze byc niepelnego
+            const between=vArr.slice(idx-1+1,idx);
+            const hasPartial=between.some(x=>x.is_full===false);
+            if(!hasPartial){
+              const dist=r.mileage-prev.mileage;
+              if(dist>0&&dist<5000) cons=parseFloat(r.liters)/dist*100;
+            }
+          }
+        }
+      }
       return `<tr>
         <td class="mono">${fmtDate(r.date)}</td>
         <td><div class="vehicle-name" style="font-size:13px;font-weight:700">${r.vehicle_plate}</div><div class="vehicle-plate" style="font-size:11px;color:var(--text3)">${r.vehicle_name}</div></td>
