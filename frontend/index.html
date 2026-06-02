@@ -330,6 +330,10 @@
       <label>Wybierz pojazd *</label>
       <select id="scan-vehicle"><option value="">— wybierz pojazd —</option></select>
     </div>
+    <div id="scan-is-full-row" style="display:none;align-items:center;gap:10px;margin-top:12px;background:rgba(0,212,200,0.06);border:1px solid rgba(0,212,200,0.2);padding:10px 14px;border-radius:8px">
+      <input type="checkbox" id="scan-is-full" checked style="width:16px;height:16px;accent-color:var(--accent)">
+      <label for="scan-is-full" style="font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;letter-spacing:0;text-transform:none">Pełne tankowanie (do pełna)</label>
+    </div>
     <div class="modal-actions">
       <button class="btn-ghost" id="btn-cancel-scan">Anuluj</button>
       <button class="btn" id="btn-analyze" disabled>Analizuj zdjecia</button>
