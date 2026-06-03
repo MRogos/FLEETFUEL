@@ -118,14 +118,22 @@ async function loadVehicles() {
   const grid=$('vehicles-grid');
   grid.innerHTML='<div class="loading">Ładowanie...</div>';
   try {
-    const vehicles=await api('GET','/vehicles');
+    const [vehicles, statsArr]=await Promise.all([api('GET','/vehicles'), api('GET','/stats/vehicles')]);
+    // Dolacz avg_consumption ze stats
+    const statsMap={};
+    (statsArr||[]).forEach(s=>{statsMap[s.id]=s;});
+    vehicles.forEach(v=>{const s=statsMap[v.id];if(s){v.avg_consumption=s.avg_consumption;v.total_liters=s.total_liters;v.total_cost=s.total_cost;v.refuel_count=s.refuel_count;v.last_mileage=s.max_mileage;}});
     if(!vehicles.length){grid.innerHTML='<div class="empty" style="grid-column:1/-1"><div class="empty-icon">🚗</div><div>Brak pojazdów</div></div>';return;}
     grid.innerHTML=vehicles.map(v=>{
       const vr_count=v.refuel_count||0, totalL=v.total_liters||0, totalC=v.total_cost||0;
+      const consColor = v.avg_consumption ? (parseFloat(v.avg_consumption)>12?'#e74c3c':parseFloat(v.avg_consumption)<7?'#2ecc71':'#f39c12') : 'var(--text3)';
       return `<div class="vehicle-card">
         <div class="vc-header">
           <div><div class="vc-name">${v.plate}</div><div style="color:var(--text3);font-size:11px;margin-top:2px">${v.name} ${v.year?'· '+v.year:''} ${fuelBadge(v.fuel_type)}</div></div>
-          <div class="vc-plate">${v.plate}</div>
+          <div style="text-align:right">
+            <div style="font-family:var(--mono);font-size:22px;font-weight:700;color:${consColor};line-height:1">${v.avg_consumption?fmtNum(v.avg_consumption,1):'—'}</div>
+            <div style="font-size:10px;color:var(--text3);letter-spacing:0.5px">L/100km</div>
+          </div>
         </div>
         <div class="vc-stats">
           <div><div class="vc-stat-label">Tankowania</div><div class="vc-stat-val">${vr_count}</div></div>
