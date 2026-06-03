@@ -167,26 +167,29 @@ async function loadRefuels() {
     if(!refuels.length){tbody.innerHTML='<tr><td colspan="11"><div class="empty"><div class="empty-icon">⛽</div><div>Brak wyników</div></div></td></tr>';return;}
     const byVehicle={};
     refuels.forEach(r=>{(byVehicle[r.vehicle_id]=byVehicle[r.vehicle_id]||[]).push(r);});
-    tbody.innerHTML=refuels.map(r=>{
-      // Wszystkie tankowania z przebiegiem posortowane - do sprawdzania ciagolosci
-      const vArr=(byVehicle[r.vehicle_id]||[]).filter(x=>x.mileage).sort((a,b)=>a.mileage-b.mileage);
-      let cons=null;
-      if(r.mileage&&r.is_full!==false){
-        const idx=vArr.findIndex(x=>x.id===r.id);
-        if(idx>0){
-          const prev=vArr[idx-1];
-          // Poprzednie musi byc pelne
-          if(prev.is_full!==false){
-            // Miedzy poprzednim a biezacym nie moze byc niepelnego
-            const between=vArr.slice(idx-1+1,idx);
-            const hasPartial=between.some(x=>x.is_full===false);
-            if(!hasPartial){
-              const dist=r.mileage-prev.mileage;
-              if(dist>0&&dist<5000) cons=parseFloat(r.liters)/dist*100;
-            }
-          }
-        }
+    // Oblicz spalanie per tankowanie - mapa id->spalanie
+    const consMap={};
+    Object.keys(byVehicle).forEach(vid=>{
+      // Sortuj po dacie potem przebiegu
+      const arr=(byVehicle[vid]||[]).filter(x=>x.mileage).sort((a,b)=>{
+        const dd=new Date(a.date)-new Date(b.date);
+        return dd!==0?dd:a.mileage-b.mileage;
+      });
+      for(let i=1;i<arr.length;i++){
+        const cur=arr[i], prv=arr[i-1];
+        // Biezace musi byc pelne
+        if(cur.is_full===false) continue;
+        // Poprzednie musi byc pelne
+        if(prv.is_full===false) continue;
+        // Miedzy nimi (i-1 < j < i) nie moze byc niepelnego
+        const hasPartial=arr.slice(i-1+1,i).some(x=>x.is_full===false);
+        if(hasPartial) continue;
+        const dist=cur.mileage-prv.mileage;
+        if(dist>0&&dist<5000) consMap[cur.id]=parseFloat(cur.liters)/dist*100;
       }
+    });
+    tbody.innerHTML=refuels.map(r=>{
+      const cons=consMap[r.id]||null;
       return `<tr>
         <td class="mono">${fmtDate(r.date)}</td>
         <td><div class="vehicle-name" style="font-size:13px;font-weight:700">${r.vehicle_plate}</div><div class="vehicle-plate" style="font-size:11px;color:var(--text3)">${r.vehicle_name}</div></td>
