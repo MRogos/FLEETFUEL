@@ -1,5 +1,4 @@
 const { pool } = require('../db/init');
-
 const getAll = async (req, res, next) => {
   try {
     const { vehicle_id, fuel_type, month, driver_id } = req.query;
@@ -17,12 +16,11 @@ const getAll = async (req, res, next) => {
       JOIN vehicles v ON v.id = r.vehicle_id
       LEFT JOIN drivers d ON d.id = r.driver_id
       ${where}
-      ORDER BY CASE WHEN r.mileage IS NULL THEN 0 ELSE 1 END DESC, r.mileage DESC, r.date DESC
+      ORDER BY CASE WHEN r.mileage IS NULL THEN 1 ELSE 0 END, r.mileage DESC, r.date DESC
     `, vals);
     res.json(rows);
   } catch (err) { next(err); }
 };
-
 const getOne = async (req, res, next) => {
   try {
     const { rows } = await pool.query(`
@@ -37,7 +35,6 @@ const getOne = async (req, res, next) => {
     res.json(rows[0]);
   } catch (err) { next(err); }
 };
-
 const create = async (req, res, next) => {
   try {
     const { vehicle_id, date, fuel_type, liters, price_per_l, total, mileage, driver_id, station, notes, is_full } = req.body;
@@ -56,7 +53,6 @@ const create = async (req, res, next) => {
     res.status(201).json(rows[0]);
   } catch (err) { next(err); }
 };
-
 const update = async (req, res, next) => {
   try {
     const fields = [], vals = [];
@@ -74,7 +70,6 @@ const update = async (req, res, next) => {
     res.json(rows[0]);
   } catch (err) { next(err); }
 };
-
 const remove = async (req, res, next) => {
   try {
     const { rowCount } = await pool.query('DELETE FROM refuels WHERE id=$1', [req.params.id]);
@@ -82,5 +77,4 @@ const remove = async (req, res, next) => {
     res.status(204).end();
   } catch (err) { next(err); }
 };
-
 module.exports = { getAll, getOne, create, update, remove };
