@@ -195,9 +195,11 @@ async function loadRefuels() {
       }
     });
     const sorted=[...refuels].sort((a,b)=>{
+      // Z przebiegiem - sortuj malejaco
       if(a.mileage&&b.mileage) return b.mileage-a.mileage;
-      if(a.mileage&&!b.mileage) return 1;
-      if(!a.mileage&&b.mileage) return -1;
+      // Bez przebiegu - na DOL (po dacie malejaco)
+      if(a.mileage&&!b.mileage) return -1;
+      if(!a.mileage&&b.mileage) return 1;
       return new Date(b.date)-new Date(a.date);
     });
     tbody.innerHTML=sorted.map(r=>{
