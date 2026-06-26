@@ -17,7 +17,7 @@ const getAll = async (req, res, next) => {
       JOIN vehicles v ON v.id = r.vehicle_id
       LEFT JOIN drivers d ON d.id = r.driver_id
       ${where}
-      ORDER BY r.date DESC, r.id DESC
+      ORDER BY CASE WHEN r.mileage IS NULL THEN 0 ELSE 1 END DESC, r.mileage DESC, r.date DESC
     `, vals);
     res.json(rows);
   } catch (err) { next(err); }
