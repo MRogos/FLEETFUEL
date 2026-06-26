@@ -179,10 +179,8 @@ async function loadRefuels() {
     const consMap={};
     Object.keys(byVehicle).forEach(vid=>{
       // Sortuj po dacie potem przebiegu
-      const arr=(byVehicle[vid]||[]).filter(x=>x.mileage).sort((a,b)=>{
-        const dd=new Date(a.date)-new Date(b.date);
-        return dd!==0?dd:a.mileage-b.mileage;
-      });
+      // Sortuj po przebiegu rosnaco (przebieg jest obiektywny)
+      const arr=(byVehicle[vid]||[]).filter(x=>x.mileage).sort((a,b)=>a.mileage-b.mileage);
       for(let i=1;i<arr.length;i++){
         const cur=arr[i], prv=arr[i-1];
         // Biezace musi byc pelne
@@ -196,7 +194,13 @@ async function loadRefuels() {
         if(dist>0&&dist<5000) consMap[cur.id]=parseFloat(cur.liters)/dist*100;
       }
     });
-    tbody.innerHTML=refuels.map(r=>{
+    const sorted=[...refuels].sort((a,b)=>{
+      if(a.mileage&&b.mileage) return b.mileage-a.mileage;
+      if(a.mileage&&!b.mileage) return 1;
+      if(!a.mileage&&b.mileage) return -1;
+      return new Date(b.date)-new Date(a.date);
+    });
+    tbody.innerHTML=sorted.map(r=>{
       const cons=consMap[r.id]||null;
       return `<tr>
         <td class="mono">${fmtDate(r.date)}</td>
