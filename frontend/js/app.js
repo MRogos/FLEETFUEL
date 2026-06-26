@@ -187,8 +187,8 @@ async function loadRefuels() {
         if(cur.is_full===false) continue;
         // Poprzednie musi byc pelne
         if(prv.is_full===false) continue;
-        // Miedzy nimi (i-1 < j < i) nie moze byc niepelnego
-        const hasPartial=arr.slice(i-1+1,i).some(x=>x.is_full===false);
+        // Miedzy nimi nie moze byc niepelnego (sprawdz wszystkie tankowania miedzy prv a cur po przebiegu)
+        const hasPartial=arr.some((x,j)=>j>arr.indexOf(prv)&&j<i&&x.is_full===false);
         if(hasPartial) continue;
         const dist=cur.mileage-prv.mileage;
         if(dist>0&&dist<5000) consMap[cur.id]=parseFloat(cur.liters)/dist*100;
