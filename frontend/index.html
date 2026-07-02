@@ -121,26 +121,29 @@
 <section class="section" id="section-reports">
   <div class="section-header">
     <div class="page-title" style="margin-bottom:0">Raporty i Analizy</div>
-    <input type="month" id="report-month" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);font-family:var(--sans);font-size:13px;padding:7px 12px;border-radius:6px;outline:none">
+    <div style="display:flex;align-items:center;gap:10px">
+      <label style="font-size:12px;color:var(--text3);white-space:nowrap">Miesiac:</label>
+      <select id="report-month" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);font-family:var(--sans);font-size:13px;padding:7px 12px;border-radius:6px;outline:none;min-width:140px">
+        <option value="">Wszystkie</option>
+      </select>
+    </div>
   </div>
   <div class="stats-row" id="report-stats"></div>
 
+  <!-- KOSZTY PER AUTO -->
   <div style="margin-top:8px">
-    <div class="section-label" style="margin-bottom:12px">Koszt i spalanie wg pojazdu (wszystkie okresy)</div>
+    <div class="section-label" style="margin-bottom:12px">Koszty per pojazd</div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Pojazd</th><th>Tankowania</th><th>Litry</th><th>Koszt PLN</th><th>Sr. cena/L</th><th>Sr. spalanie</th><th>Przebieg (zakres)</th></tr></thead>
-        <tbody id="report-table"><tr><td colspan="7"><div class="loading">Ladowanie...</div></td></tr></tbody>
+        <thead><tr><th>Pojazd</th><th>Tankowania</th><th>Litry</th><th style="color:var(--accent)">Koszt PLN</th><th>Sr. cena/L</th><th>Sr. spalanie</th><th>Km przejechane</th><th>Koszt/km</th></tr></thead>
+        <tbody id="report-table"><tr><td colspan="8"><div class="loading">Ladowanie...</div></td></tr></tbody>
       </table>
     </div>
   </div>
 
   <!-- PRZEBIEG MIESIĘCZNY -->
   <div style="margin-top:24px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <div class="section-label">Przebieg miesięczny per pojazd</div>
-      <select id="mileage-month" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);font-family:var(--sans);font-size:12px;padding:5px 10px;border-radius:6px;outline:none"></select>
-    </div>
+    <div class="section-label" style="margin-bottom:12px">Przebieg miesięczny per pojazd</div>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Pojazd</th><th>Przebieg start</th><th>Przebieg koniec</th><th style="color:var(--accent)">Km przejechane</th><th>Tankowania</th><th>Litry</th><th>Koszt PLN</th></tr></thead>
