@@ -7,5 +7,6 @@ router.get('/vehicles', ctrl.perVehicle);
 router.get('/monthly-vehicles', ctrl.monthlyPerVehicle);
 router.get('/monthly-mileage', ctrl.monthlyMileage);
 router.get('/drivers', ctrl.perDriver);
+router.get('/costs-per-vehicle', ctrl.costsPerVehicleMonth);
 
 module.exports = router;
