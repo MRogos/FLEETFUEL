@@ -278,30 +278,116 @@ async function loadRefuels() {
 }
 
 /* ─── REPORTS ─── */
-async function loadReports() {
+async function initReportMonths() {
+  // Pobierz dostepne miesiace i wypelnij select
   try {
-    const month=$('report-month')?$('report-month').value:'';
-    const [dash,stats]=await Promise.all([api('GET','/stats/dashboard'),api('GET','/stats/vehicles')]);
-    const avgPpL=dash.total_liters>0&&dash.total_cost>0?dash.total_cost/dash.total_liters:0;
-    $('report-stats').innerHTML=`
-      <div class="stat-card"><div class="stat-label">Łączny koszt</div><div class="stat-value">${fmtNum(dash.total_cost,0)}</div><div class="stat-unit">PLN</div></div>
-      <div class="stat-card green"><div class="stat-label">Łącznie litrów</div><div class="stat-value">${fmtNum(dash.total_liters,0)}</div><div class="stat-unit">litrów</div></div>
-      <div class="stat-card blue"><div class="stat-label">Śr. cena / litr</div><div class="stat-value">${fmtNum(avgPpL,2)}</div><div class="stat-unit">PLN/L</div></div>
-      <div class="stat-card red"><div class="stat-label">Pojazdy</div><div class="stat-value">${fmtNum(dash.vehicle_count)}</div><div class="stat-unit">aktywne</div></div>`;
-    const tbody=$('report-table');
-    if(!stats.length){tbody.innerHTML='<tr><td colspan="7"><div class="empty">Brak danych</div></td></tr>';return;}
-    tbody.innerHTML=stats.map(v=>`
-      <tr>
-        <td><div class="vehicle-name">${v.plate}</div><div style="font-size:11px;color:var(--text3)">${v.name}</div></td>
-        <td class="mono">${v.refuel_count}</td>
-        <td class="mono">${fmtNum(v.total_liters,1)} L</td>
-        <td class="mono" style="color:var(--accent)">${fmtNum(v.total_cost,2)} zł</td>
-        <td class="mono">${v.avg_price_per_l?fmtNum(v.avg_price_per_l,3)+' zł':'—'}</td>
-        <td>${consBadge(v.avg_consumption)}</td>
-        <td class="mono">${v.km_range?fmtNum(v.km_range)+' km':'—'}</td>
+    const data = await api('GET', '/stats/monthly-mileage');
+    const sel = $('report-month');
+    if (!sel || !data || !data.available_months) return;
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">Wszystkie okresy</option>';
+    data.available_months.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m; opt.textContent = m;
+      sel.appendChild(opt);
+    });
+    if (cur) sel.value = cur;
+  } catch(e) {}
+}
+
+async function loadReports() {
+  const month = $('report-month') ? $('report-month').value : '';
+  try {
+    const monthParam = month ? '?month='+month : '';
+    const [dash, costs, mileage, drivers] = await Promise.all([
+      api('GET', '/stats/dashboard'+(month?'?month='+month:'')),
+      api('GET', '/stats/costs-per-vehicle'+monthParam),
+      api('GET', '/stats/monthly-mileage'+monthParam),
+      api('GET', '/stats/drivers'+monthParam),
+    ]);
+
+    // Sumy
+    const avgPpL = dash.total_liters>0&&dash.total_cost>0 ? dash.total_cost/dash.total_liters : 0;
+    $('report-stats').innerHTML = `
+      <div class="stat-card"><div class="stat-label">Koszt ${month||'łącznie'}</div><div class="stat-value">${fmtNum(dash.total_cost,0)}</div><div class="stat-unit">PLN</div></div>
+      <div class="stat-card green"><div class="stat-label">Litry ${month||'łącznie'}</div><div class="stat-value">${fmtNum(dash.total_liters,0)}</div><div class="stat-unit">litrów</div></div>
+      <div class="stat-card blue"><div class="stat-label">Śr. cena/litr</div><div class="stat-value">${fmtNum(avgPpL,2)}</div><div class="stat-unit">PLN/L</div></div>
+      <div class="stat-card red"><div class="stat-label">Tankowania</div><div class="stat-value">${fmtNum(dash.refuel_count)}</div><div class="stat-unit">w okresie</div></div>`;
+
+    // Koszty per pojazd
+    const tbody = $('report-table');
+    if (!costs || !costs.data || !costs.data.length) {
+      tbody.innerHTML = '<tr><td colspan="8"><div class="empty">Brak danych dla wybranego okresu</div></td></tr>';
+    } else {
+      // Uzupelnij miesiac w selekcie z dostepnych miesiecy
+      if (costs.available_months) {
+        const sel = $('report-month');
+        if (sel) {
+          const cur = sel.value;
+          sel.innerHTML = '<option value="">Wszystkie okresy</option>';
+          costs.available_months.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m; opt.textContent = m; sel.appendChild(opt);
+          });
+          sel.value = cur;
+        }
+      }
+      tbody.innerHTML = costs.data.filter(v=>v.refuel_count>0).map(v => {
+        const costPerKm = v.km_driven && v.total_cost ? (v.total_cost/v.km_driven).toFixed(2) : null;
+        return `<tr>
+          <td><div style="font-weight:700;font-family:var(--mono)">${v.plate}</div><div style="font-size:11px;color:var(--text3)">${v.name}</div></td>
+          <td class="mono">${v.refuel_count}</td>
+          <td class="mono">${fmtNum(v.total_liters,1)} L</td>
+          <td class="mono" style="color:var(--accent);font-weight:700">${fmtNum(v.total_cost,2)} zł</td>
+          <td class="mono">${v.avg_price_per_l?fmtNum(v.avg_price_per_l,3)+' zł':'—'}</td>
+          <td>${consBadge(v.avg_consumption)}</td>
+          <td class="mono">${v.km_driven?fmtNum(v.km_driven)+' km':'—'}</td>
+          <td class="mono" style="color:var(--text2)">${costPerKm?costPerKm+' zł/km':'—'}</td>
+        </tr>`;
+      }).join('') || '<tr><td colspan="8"><div class="empty">Brak tankowań w wybranym okresie</div></td></tr>';
+
+      // Podsumowanie
+      const total = costs.summary;
+      tbody.innerHTML += `<tr style="border-top:2px solid var(--border);font-weight:700">
+        <td colspan="2" style="color:var(--text3);font-size:12px">SUMA</td>
+        <td class="mono">${fmtNum(total.total_liters,1)} L</td>
+        <td class="mono" style="color:var(--accent)">${fmtNum(total.total_cost,2)} zł</td>
+        <td colspan="4"></td>
+      </tr>`;
+    }
+
+    // Przebieg
+    const mTbody = $('mileage-table');
+    if (mileage && mileage.data && mileage.data.length) {
+      mTbody.innerHTML = mileage.data.map(r => `<tr>
+        <td><div style="font-weight:700;font-family:var(--mono);font-size:13px">${r.plate}</div><div style="font-size:11px;color:var(--text3)">${r.name}</div></td>
+        <td class="mono">${r.mileage_start?fmtNum(r.mileage_start)+' km':'—'}</td>
+        <td class="mono">${r.mileage_end?fmtNum(r.mileage_end)+' km':'—'}</td>
+        <td class="mono" style="color:var(--accent);font-weight:700">${r.km_driven?fmtNum(r.km_driven)+' km':'—'}</td>
+        <td class="mono">${r.refuel_count}</td>
+        <td class="mono">${fmtNum(r.total_liters,1)} L</td>
+        <td class="mono" style="color:var(--accent)">${fmtNum(r.total_cost,2)} zł</td>
       </tr>`).join('');
-    await Promise.all([loadMonthlyMileage(month), loadDriverStats(month)]);
-  } catch(err){console.error('Reports:',err);}
+    } else {
+      mTbody.innerHTML = '<tr><td colspan="7"><div class="empty">Brak danych przebiegów. Upewnij się że tankowania mają wpisany przebieg km.</div></td></tr>';
+    }
+
+    // Kierowcy
+    const dTbody = $('driver-stats-table');
+    if (drivers && drivers.length) {
+      dTbody.innerHTML = drivers.map(d => `<tr>
+        <td style="font-weight:700">${d.driver_name}</td>
+        <td class="mono">${d.refuel_count}</td>
+        <td class="mono">${fmtNum(d.total_liters,1)} L</td>
+        <td class="mono" style="color:var(--accent)">${fmtNum(d.total_cost,2)} zł</td>
+        <td>${consBadge(d.avg_consumption)}</td>
+        <td class="mono">${d.vehicle_count} ${d.vehicle_count===1?'pojazd':d.vehicle_count<5?'pojazdy':'pojazdów'}</td>
+      </tr>`).join('');
+    } else {
+      dTbody.innerHTML = '<tr><td colspan="6"><div class="empty">Brak danych</div></td></tr>';
+    }
+
+  } catch(err){ console.error('Reports:', err); }
 }
 
 /* ─── PRZEBIEG MIESIĘCZNY ─── */
@@ -788,7 +874,7 @@ document.addEventListener('DOMContentLoaded', function() {
   });
   $('btn-add-driver')&&$('btn-add-driver').addEventListener('click',addDriver);
   $('mileage-month')&&$('mileage-month').addEventListener('change',function(){loadMonthlyMileage(this.value);});
-  $('report-month')&&$('report-month').addEventListener('change',function(){loadMonthlyMileage(this.value);loadDriverStats(this.value);});
+  $('report-month')&&$('report-month').addEventListener('change',loadReports);
   $('btn-add-invoice')&&$('btn-add-invoice').addEventListener('click',()=>{
     invoiceScannedItems=[];
     $('inv-no').value=''; $('inv-month').value=new Date().toISOString().slice(0,7);
