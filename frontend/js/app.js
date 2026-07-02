@@ -529,6 +529,7 @@ async function openScanModal() {
   $('btn-analyze').disabled=true; $('btn-analyze').style.display='';
   $('btn-scan-save').style.display='none';
   await Promise.all([populateVehicleSelect('scan-vehicle',false), populateDriverSelect()]);
+  if($('sr-date')) $('sr-date').value=new Date().toISOString().slice(0,10);
   $('modal-scan').classList.add('open');
 }
 
@@ -574,7 +575,8 @@ $('btn-scan-save').addEventListener('click',async()=>{
   if(!vehicleId){showToast('Wybierz pojazd!');return;}
   const liters=parseFloat($('sr-liters').value);
   if(!liters||liters<=0){showToast('Podaj prawidłową ilość litrów!');return;}
-  const body={vehicle_id:vehicleId,date:new Date().toISOString().slice(0,10),liters,fuel_type:$('sr-fuel').value||'ON'};
+  const scanDate=$('sr-date')?$('sr-date').value:new Date().toISOString().slice(0,10);
+  const body={vehicle_id:vehicleId,date:scanDate||new Date().toISOString().slice(0,10),liters,fuel_type:$('sr-fuel').value||'ON'};
   const price=parseFloat($('sr-price').value), total=parseFloat($('sr-total').value), mileage=parseInt($('sr-mileage').value), station=$('sr-station').value.trim();
   const driverId=parseInt($('scan-driver')?$('scan-driver').value:'');
   if(price>0) body.price_per_l=price; if(total>0) body.total=total; if(mileage>0) body.mileage=mileage;
