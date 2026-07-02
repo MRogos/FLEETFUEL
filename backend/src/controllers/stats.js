@@ -50,17 +50,15 @@ const perVehicle = async (req, res, next) => {
     `);
     for (const row of rows) {
       const { rows: vr } = await pool.query(
-        'SELECT liters, mileage, is_full FROM refuels WHERE vehicle_id=$1 AND mileage IS NOT NULL ORDER BY date, mileage',
+        'SELECT liters, mileage, is_full FROM refuels WHERE vehicle_id=$1 AND mileage IS NOT NULL ORDER BY mileage',
         [row.id]
       );
       if (vr.length >= 2) {
         const segs = [];
         for (let i = 1; i < vr.length; i++) {
-          // Jezeli KTREKOLWIEK z pary jest niepelne - pomijamy segment
           if (vr[i].is_full === false || vr[i-1].is_full === false) continue;
-          // Sprawdz czy miedzy nimi nie bylo niepelnego
-          const hasPartialBetween = vr.slice(i-1+1, i).some(x => x.is_full === false);
-          if (hasPartialBetween) continue;
+          const hasPartial = vr.some((x,j) => j > i-1 && j < i && x.is_full === false);
+          if (hasPartial) continue;
           const dist = vr[i].mileage - vr[i-1].mileage;
           if (dist > 0 && dist < 5000) segs.push(parseFloat(vr[i].liters) / dist * 100);
         }
@@ -78,30 +76,67 @@ const monthlyMileage = async (req, res, next) => {
     const { month } = req.query;
     const currentMonth = month || new Date().toISOString().slice(0,7);
 
-    const { rows } = await pool.query(`
-      SELECT
-        v.id, v.name, v.plate,
-        TO_CHAR(r.date, 'YYYY-MM') AS month,
-        MIN(r.mileage) AS mileage_start,
-        MAX(r.mileage) AS mileage_end,
-        (MAX(r.mileage) - MIN(r.mileage)) AS km_driven,
-        COUNT(r.id)::int AS refuel_count,
-        COALESCE(SUM(r.liters),0)::float AS total_liters,
-        COALESCE(SUM(r.total),0)::float AS total_cost
-      FROM vehicles v
-      JOIN refuels r ON r.vehicle_id = v.id AND r.mileage IS NOT NULL
-        AND TO_CHAR(r.date,'YYYY-MM') = $1
-      GROUP BY v.id, v.name, v.plate, month
-      HAVING COUNT(r.id) >= 1
-      ORDER BY v.plate
-    `, [currentMonth]);
-
-    // Dostepne miesiace
+    // Pobierz dostepne miesiace
     const { rows: months } = await pool.query(`
       SELECT DISTINCT TO_CHAR(date,'YYYY-MM') AS month
       FROM refuels WHERE mileage IS NOT NULL
       ORDER BY month DESC LIMIT 12
     `);
+
+    // Dla kazdego pojazdu: znajdz pierwsze i ostatnie tankowanie Z PRZEBIEGIEM
+    // w danym miesiacu LUB najblizsze tankowanie sprzed miesiaca jako punkt startowy
+    const { rows } = await pool.query(`
+      WITH month_refuels AS (
+        SELECT
+          v.id AS vehicle_id,
+          v.name,
+          v.plate,
+          r.mileage,
+          r.date,
+          r.liters,
+          r.total,
+          ROW_NUMBER() OVER (PARTITION BY v.id ORDER BY r.mileage ASC) AS rn_asc,
+          ROW_NUMBER() OVER (PARTITION BY v.id ORDER BY r.mileage DESC) AS rn_desc,
+          COUNT(r.id) OVER (PARTITION BY v.id) AS cnt
+        FROM vehicles v
+        JOIN refuels r ON r.vehicle_id = v.id
+          AND r.mileage IS NOT NULL
+          AND TO_CHAR(r.date, 'YYYY-MM') = $1
+      )
+      SELECT
+        vehicle_id AS id,
+        name,
+        plate,
+        MIN(mileage) AS mileage_start,
+        MAX(mileage) AS mileage_end,
+        (MAX(mileage) - MIN(mileage)) AS km_driven,
+        COUNT(*)::int AS refuel_count,
+        COALESCE(SUM(liters),0)::float AS total_liters,
+        COALESCE(SUM(total),0)::float AS total_cost
+      FROM month_refuels
+      GROUP BY vehicle_id, name, plate
+      HAVING COUNT(*) >= 1
+      ORDER BY plate
+    `, [currentMonth]);
+
+    // Jesli pojazd ma tylko 1 tankowanie w miesiacu - sprobuj znalezc poprzednie
+    // jako punkt startowy (ostatnie tankowanie przed tym miesiacem)
+    for (const row of rows) {
+      if (row.km_driven === 0 || row.km_driven === null) {
+        // Znajdz ostatni przebieg przed tym miesiacem
+        const { rows: prev } = await pool.query(`
+          SELECT mileage FROM refuels
+          WHERE vehicle_id = $1
+            AND mileage IS NOT NULL
+            AND TO_CHAR(date,'YYYY-MM') < $2
+          ORDER BY mileage DESC LIMIT 1
+        `, [row.id, currentMonth]);
+        if (prev.length && prev[0].mileage) {
+          row.mileage_start = prev[0].mileage;
+          row.km_driven = row.mileage_end - prev[0].mileage;
+        }
+      }
+    }
 
     res.json({ month: currentMonth, data: rows, available_months: months.map(m => m.month) });
   } catch (err) { next(err); }
@@ -111,7 +146,8 @@ const monthlyMileage = async (req, res, next) => {
 const perDriver = async (req, res, next) => {
   try {
     const { month } = req.query;
-    const conds = month ? `AND TO_CHAR(r.date,'YYYY-MM') = '${month}'` : '';
+    const conds = month ? `AND TO_CHAR(r.date,'YYYY-MM') = $2` : '';
+    const vals = month ? [true, month] : [true];
 
     const { rows } = await pool.query(`
       SELECT
@@ -124,12 +160,11 @@ const perDriver = async (req, res, next) => {
              THEN (SUM(r.total)/SUM(r.liters))::numeric(8,4) ELSE NULL END AS avg_price_per_l
       FROM drivers d
       LEFT JOIN refuels r ON r.driver_id = d.id ${conds}
-      WHERE d.active = true
+      WHERE d.active = $1
       GROUP BY d.id, d.name
       ORDER BY total_liters DESC
-    `);
+    `, vals);
 
-    // Avg consumption per driver
     for (const row of rows) {
       const { rows: vr } = await pool.query(`
         SELECT r.liters, r.mileage, r.vehicle_id, r.is_full
@@ -138,17 +173,14 @@ const perDriver = async (req, res, next) => {
         ORDER BY r.vehicle_id, r.mileage
       `, [row.id]);
 
-      // Per vehicle segments
       const byVehicle = {};
       vr.forEach(r => { (byVehicle[r.vehicle_id] = byVehicle[r.vehicle_id]||[]).push(r); });
       const segs = [];
       Object.values(byVehicle).forEach(arr => {
         for (let i = 1; i < arr.length; i++) {
-          // Jezeli ktorekolwiek z pary jest niepelne - pomijamy segment
           if (arr[i].is_full === false || arr[i-1].is_full === false) continue;
-          // Sprawdz czy miedzy nimi nie bylo niepelnego
-          const hasPartialBetween = arr.slice(i-1+1, i).some(x => x.is_full === false);
-          if (hasPartialBetween) continue;
+          const hasPartial = arr.some((x,j) => j > i-1 && j < i && x.is_full === false);
+          if (hasPartial) continue;
           const dist = arr[i].mileage - arr[i-1].mileage;
           if (dist > 0 && dist < 5000) segs.push(parseFloat(arr[i].liters) / dist * 100);
         }
