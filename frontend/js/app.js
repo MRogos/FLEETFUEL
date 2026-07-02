@@ -32,6 +32,21 @@ function consBadge(val) {
   return `<span class="badge ${cls}">${fmtNum(v,1)} L/100</span>`;
 }
 
+/* ─── SORTOWANIE ─── */
+let sortCol='mileage', sortDir=-1; // domyslnie przebieg malejaco
+
+function sortRefuels(col) {
+  if(sortCol===col) { sortDir*=-1; } else { sortCol=col; sortDir=-1; }
+  // Zaktualizuj strzalki w naglowkach
+  document.querySelectorAll('#refuels-table-head th[data-col]').forEach(th=>{
+    const arrow=th.querySelector('.sort-arrow');
+    if(!arrow) return;
+    if(th.dataset.col===col) arrow.textContent=sortDir===1?' ↑':' ↓';
+    else arrow.textContent=' ↕';
+  });
+  loadRefuelsData();
+}
+
 /* ─── CACHE ─── */
 let _vehiclesCache=null, _driversCache=null;
 
@@ -208,10 +223,25 @@ async function loadRefuels() {
       }
     });
     const sorted=[...refuels].sort((a,b)=>{
-      if(a.mileage&&b.mileage) return b.mileage-a.mileage;
-      if(a.mileage&&!b.mileage) return -1;
-      if(!a.mileage&&b.mileage) return 1;
-      return new Date(b.date)-new Date(a.date);
+      let va, vb;
+      if(sortCol==='date')    { va=new Date(a.date); vb=new Date(b.date); }
+      else if(sortCol==='mileage') {
+        // Bez przebiegu na dol
+        if(a.mileage&&b.mileage) return sortDir*(a.mileage-b.mileage)*-1;
+        if(a.mileage&&!b.mileage) return -1;
+        if(!a.mileage&&b.mileage) return 1;
+        return new Date(b.date)-new Date(a.date);
+      }
+      else if(sortCol==='liters')  { va=parseFloat(a.liters)||0; vb=parseFloat(b.liters)||0; }
+      else if(sortCol==='total')   { va=parseFloat(a.total)||0; vb=parseFloat(b.total)||0; }
+      else if(sortCol==='cons')    { va=consMap[a.id]||0; vb=consMap[b.id]||0; }
+      else if(sortCol==='price')   { va=parseFloat(a.price_per_l)||0; vb=parseFloat(b.price_per_l)||0; }
+      else if(sortCol==='vehicle') { va=a.vehicle_plate||''; vb=b.vehicle_plate||''; }
+      else if(sortCol==='driver')  { va=a.driver_name||''; vb=b.driver_name||''; }
+      else { va=0; vb=0; }
+      if(va<vb) return sortDir;
+      if(va>vb) return -sortDir;
+      return 0;
     });
     tbody.innerHTML=sorted.map(r=>{
       const cons=consMap[r.id]||null;
