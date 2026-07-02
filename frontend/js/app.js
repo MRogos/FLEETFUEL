@@ -34,17 +34,67 @@ function consBadge(val) {
 
 /* ─── SORTOWANIE ─── */
 let sortCol='mileage', sortDir=-1; // domyslnie przebieg malejaco
+let _consMap={}; // globalna mapa spalania
+let _refuelsCache=[]; // cache danych do sortowania
 
 function sortRefuels(col) {
   if(sortCol===col) { sortDir*=-1; } else { sortCol=col; sortDir=-1; }
-  // Zaktualizuj strzalki w naglowkach
+  // Zaktualizuj strzalki
   document.querySelectorAll('#refuels-table-head th[data-col]').forEach(th=>{
     const arrow=th.querySelector('.sort-arrow');
     if(!arrow) return;
     if(th.dataset.col===col) arrow.textContent=sortDir===1?' ↑':' ↓';
     else arrow.textContent=' ↕';
   });
-  loadRefuelsData();
+  // Jesli mamy cache - posortuj bez ladowania
+  if(_refuelsCache.length) {
+    renderRefuels(_refuelsCache);
+  } else {
+    loadRefuelsData();
+  }
+}
+
+function renderRefuels(refuels) {
+  const tbody=$('refuels-table');
+  const sorted=[...refuels].sort((a,b)=>{
+    let va, vb;
+    if(sortCol==='date')    { va=new Date(a.date); vb=new Date(b.date); }
+    else if(sortCol==='mileage') {
+      if(a.mileage&&b.mileage) return sortDir*(a.mileage-b.mileage)*-1;
+      if(a.mileage&&!b.mileage) return -1;
+      if(!a.mileage&&b.mileage) return 1;
+      return new Date(b.date)-new Date(a.date);
+    }
+    else if(sortCol==='liters')  { va=parseFloat(a.liters)||0; vb=parseFloat(b.liters)||0; }
+    else if(sortCol==='total')   { va=parseFloat(a.total)||0; vb=parseFloat(b.total)||0; }
+    else if(sortCol==='cons')    { va=_consMap[a.id]||0; vb=_consMap[b.id]||0; }
+    else if(sortCol==='price')   { va=parseFloat(a.price_per_l)||0; vb=parseFloat(b.price_per_l)||0; }
+    else if(sortCol==='vehicle') { va=a.vehicle_plate||''; vb=b.vehicle_plate||''; }
+    else if(sortCol==='driver')  { va=a.driver_name||''; vb=b.driver_name||''; }
+    else { va=0; vb=0; }
+    if(va<vb) return sortDir;
+    if(va>vb) return -sortDir;
+    return 0;
+  });
+  tbody.innerHTML=sorted.map(r=>{
+    const cons=_consMap[r.id]||null;
+    return `<tr>
+      <td class="mono">${fmtDate(r.date)}</td>
+      <td><div class="vehicle-name" style="font-size:13px;font-weight:700">${r.vehicle_plate}</div><div class="vehicle-plate" style="font-size:11px;color:var(--text3)">${r.vehicle_name}</div></td>
+      <td style="font-size:12px;color:var(--text2)">${r.driver_name||'—'}</td>
+      <td>${fuelBadge(r.fuel_type)} ${r.is_full===false?'<span class="badge" style="background:rgba(231,76,60,0.15);color:#e74c3c;font-size:9px">NIEPEŁNE</span>':''}</td>
+      <td class="mono">${fmtNum(r.liters,2)} L</td>
+      <td class="mono">${r.price_per_l?fmtNum(r.price_per_l,3)+' zł':'—'}</td>
+      <td class="mono" style="color:var(--accent)">${r.total?fmtNum(r.total,2)+' zł':'—'}</td>
+      <td class="mono">${r.mileage?fmtNum(r.mileage)+' km':'—'}</td>
+      <td>${consBadge(cons)}</td>
+      <td style="font-size:12px;color:var(--text2)">${r.station||'—'}</td>
+      <td style="white-space:nowrap">
+        <button class="btn-edit" onclick="openRefuelModal(${r.id})">✏️</button>
+        <button class="btn-danger" onclick="deleteRefuel(${r.id})">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
 }
 
 /* ─── CACHE ─── */
@@ -209,7 +259,7 @@ async function loadRefuels() {
     if(!refuels.length){tbody.innerHTML='<tr><td colspan="11"><div class="empty"><div class="empty-icon">⛽</div><div>Brak wyników</div></div></td></tr>';return;}
     const byVehicle={};
     refuels.forEach(r=>{(byVehicle[r.vehicle_id]=byVehicle[r.vehicle_id]||[]).push(r);});
-    const consMap={};
+    _consMap={};
     Object.keys(byVehicle).forEach(vid=>{
       const arr=(byVehicle[vid]||[]).filter(x=>x.mileage).sort((a,b)=>a.mileage-b.mileage);
       for(let i=1;i<arr.length;i++){
@@ -219,49 +269,11 @@ async function loadRefuels() {
         const hasPartial=arr.some((x,j)=>j>prvIdx&&j<i&&x.is_full===false);
         if(hasPartial) continue;
         const dist=cur.mileage-prv.mileage;
-        if(dist>0&&dist<5000) consMap[cur.id]=parseFloat(cur.liters)/dist*100;
+        if(dist>0&&dist<5000) _consMap[cur.id]=parseFloat(cur.liters)/dist*100;
       }
     });
-    const sorted=[...refuels].sort((a,b)=>{
-      let va, vb;
-      if(sortCol==='date')    { va=new Date(a.date); vb=new Date(b.date); }
-      else if(sortCol==='mileage') {
-        // Bez przebiegu na dol
-        if(a.mileage&&b.mileage) return sortDir*(a.mileage-b.mileage)*-1;
-        if(a.mileage&&!b.mileage) return -1;
-        if(!a.mileage&&b.mileage) return 1;
-        return new Date(b.date)-new Date(a.date);
-      }
-      else if(sortCol==='liters')  { va=parseFloat(a.liters)||0; vb=parseFloat(b.liters)||0; }
-      else if(sortCol==='total')   { va=parseFloat(a.total)||0; vb=parseFloat(b.total)||0; }
-      else if(sortCol==='cons')    { va=consMap[a.id]||0; vb=consMap[b.id]||0; }
-      else if(sortCol==='price')   { va=parseFloat(a.price_per_l)||0; vb=parseFloat(b.price_per_l)||0; }
-      else if(sortCol==='vehicle') { va=a.vehicle_plate||''; vb=b.vehicle_plate||''; }
-      else if(sortCol==='driver')  { va=a.driver_name||''; vb=b.driver_name||''; }
-      else { va=0; vb=0; }
-      if(va<vb) return sortDir;
-      if(va>vb) return -sortDir;
-      return 0;
-    });
-    tbody.innerHTML=sorted.map(r=>{
-      const cons=consMap[r.id]||null;
-      return `<tr>
-        <td class="mono">${fmtDate(r.date)}</td>
-        <td><div class="vehicle-name" style="font-size:13px;font-weight:700">${r.vehicle_plate}</div><div class="vehicle-plate" style="font-size:11px;color:var(--text3)">${r.vehicle_name}</div></td>
-        <td style="font-size:12px;color:var(--text2)">${r.driver_name||'—'}</td>
-        <td>${fuelBadge(r.fuel_type)} ${r.is_full===false?'<span class="badge" style="background:rgba(231,76,60,0.15);color:#e74c3c;font-size:9px">NIEPEŁNE</span>':''}</td>
-        <td class="mono">${fmtNum(r.liters,2)} L</td>
-        <td class="mono">${r.price_per_l?fmtNum(r.price_per_l,3)+' zł':'—'}</td>
-        <td class="mono" style="color:var(--accent)">${r.total?fmtNum(r.total,2)+' zł':'—'}</td>
-        <td class="mono">${r.mileage?fmtNum(r.mileage)+' km':'—'}</td>
-        <td>${consBadge(cons)}</td>
-        <td style="font-size:12px;color:var(--text2)">${r.station||'—'}</td>
-        <td style="white-space:nowrap">
-          <button class="btn-edit" onclick="openRefuelModal(${r.id})">✏️</button>
-          <button class="btn-danger" onclick="deleteRefuel(${r.id})">✕</button>
-        </td>
-      </tr>`;
-    }).join('');
+    _refuelsCache=[...refuels];
+    renderRefuels(refuels);
   } catch(err){tbody.innerHTML='<tr><td colspan="11"><div class="empty">Błąd</div></td></tr>';}
 }
 
@@ -472,7 +484,7 @@ async function loadRefuelsData() {
     if(!refuels.length){tbody.innerHTML='<tr><td colspan="11"><div class="empty"><div class="empty-icon">⛽</div><div>Brak wyników</div></div></td></tr>';return;}
     const byVehicle={};
     refuels.forEach(r=>{(byVehicle[r.vehicle_id]=byVehicle[r.vehicle_id]||[]).push(r);});
-    const consMap={};
+    _consMap={};
     Object.keys(byVehicle).forEach(vid=>{
       const arr=(byVehicle[vid]||[]).filter(x=>x.mileage).sort((a,b)=>a.mileage-b.mileage);
       for(let i=1;i<arr.length;i++){
@@ -482,7 +494,7 @@ async function loadRefuelsData() {
         const hasPartial=arr.some((x,j)=>j>prvIdx&&j<i&&x.is_full===false);
         if(hasPartial) continue;
         const dist=cur.mileage-prv.mileage;
-        if(dist>0&&dist<5000) consMap[cur.id]=parseFloat(cur.liters)/dist*100;
+        if(dist>0&&dist<5000) _consMap[cur.id]=parseFloat(cur.liters)/dist*100;
       }
     });
     const sorted=[...refuels].sort((a,b)=>{
@@ -492,7 +504,7 @@ async function loadRefuelsData() {
       return new Date(b.date)-new Date(a.date);
     });
     tbody.innerHTML=sorted.map(r=>{
-      const cons=consMap[r.id]||null;
+      const cons=_consMap[r.id]||null;
       return `<tr>
         <td class="mono">${fmtDate(r.date)}</td>
         <td><div class="vehicle-name" style="font-size:13px;font-weight:700">${r.vehicle_plate}</div><div class="vehicle-plate" style="font-size:11px;color:var(--text3)">${r.vehicle_name}</div></td>
