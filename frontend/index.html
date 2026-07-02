@@ -99,7 +99,19 @@
   </div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Data</th><th>Pojazd</th><th>Kierowca</th><th>Paliwo</th><th>Litry</th><th>Cena/L</th><th>Koszt PLN</th><th>Przebieg</th><th>Spalanie</th><th>Stacja</th><th></th></tr></thead>
+      <thead id="refuels-table-head"><tr>
+        <th data-col="date" onclick="sortRefuels('date')" style="cursor:pointer;user-select:none">Data<span class="sort-arrow"> ↕</span></th>
+        <th data-col="vehicle" onclick="sortRefuels('vehicle')" style="cursor:pointer;user-select:none">Pojazd<span class="sort-arrow"> ↕</span></th>
+        <th data-col="driver" onclick="sortRefuels('driver')" style="cursor:pointer;user-select:none">Kierowca<span class="sort-arrow"> ↕</span></th>
+        <th>Paliwo</th>
+        <th data-col="liters" onclick="sortRefuels('liters')" style="cursor:pointer;user-select:none">Litry<span class="sort-arrow"> ↕</span></th>
+        <th data-col="price" onclick="sortRefuels('price')" style="cursor:pointer;user-select:none">Cena/L<span class="sort-arrow"> ↕</span></th>
+        <th data-col="total" onclick="sortRefuels('total')" style="cursor:pointer;user-select:none">Koszt PLN<span class="sort-arrow"> ↕</span></th>
+        <th data-col="mileage" onclick="sortRefuels('mileage')" style="cursor:pointer;user-select:none">Przebieg<span class="sort-arrow"> ↓</span></th>
+        <th data-col="cons" onclick="sortRefuels('cons')" style="cursor:pointer;user-select:none">Spalanie<span class="sort-arrow"> ↕</span></th>
+        <th>Stacja</th>
+        <th></th>
+      </tr></thead>
       <tbody id="refuels-table"><tr><td colspan="11"><div class="loading">Ladowanie...</div></td></tr></tbody>
     </table>
   </div>
