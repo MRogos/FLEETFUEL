@@ -35,6 +35,7 @@ function consBadge(val) {
 /* ─── SORTOWANIE ─── */
 let sortCol='mileage', sortDir=-1; // domyslnie przebieg malejaco
 let _consMap={}; // globalna mapa spalania
+let _distMap={}; // globalna mapa dystansu (odcinek od poprzedniego tankowania)
 let _refuelsCache=[]; // cache danych do sortowania
 
 function sortRefuels(col) {
@@ -68,6 +69,7 @@ function renderRefuels(refuels) {
     else if(sortCol==='liters')  { va=parseFloat(a.liters)||0; vb=parseFloat(b.liters)||0; }
     else if(sortCol==='total')   { va=parseFloat(a.total)||0; vb=parseFloat(b.total)||0; }
     else if(sortCol==='cons')    { va=_consMap[a.id]||0; vb=_consMap[b.id]||0; }
+    else if(sortCol==='dist')    { va=_distMap[a.id]||0; vb=_distMap[b.id]||0; }
     else if(sortCol==='price')   { va=parseFloat(a.price_per_l)||0; vb=parseFloat(b.price_per_l)||0; }
     else if(sortCol==='vehicle') { va=a.vehicle_plate||''; vb=b.vehicle_plate||''; }
     else if(sortCol==='driver')  { va=a.driver_name||''; vb=b.driver_name||''; }
@@ -87,6 +89,7 @@ function renderRefuels(refuels) {
       <td class="mono">${r.price_per_l?fmtNum(r.price_per_l,3)+' zł':'—'}</td>
       <td class="mono" style="color:var(--accent)">${r.total?fmtNum(r.total,2)+' zł':'—'}</td>
       <td class="mono">${r.mileage?fmtNum(r.mileage)+' km':'—'}</td>
+      <td class="mono" style="color:var(--text2)">${_distMap[r.id]?fmtNum(_distMap[r.id])+' km':'—'}</td>
       <td>${consBadge(cons)}</td>
       <td style="font-size:12px;color:var(--text2)">${r.station||'—'}</td>
       <td style="white-space:nowrap">
@@ -253,10 +256,10 @@ async function loadRefuels() {
   if(ff) params.set('fuel_type',ff);
   if(fm) params.set('month',fm);
   const tbody=$('refuels-table');
-  tbody.innerHTML='<tr><td colspan="11"><div class="loading">Ładowanie...</div></td></tr>';
+  tbody.innerHTML='<tr><td colspan="12"><div class="loading">Ładowanie...</div></td></tr>';
   try {
     const refuels=await api('GET',`/refuels?${params}`);
-    if(!refuels.length){tbody.innerHTML='<tr><td colspan="11"><div class="empty"><div class="empty-icon">⛽</div><div>Brak wyników</div></div></td></tr>';return;}
+    if(!refuels.length){tbody.innerHTML='<tr><td colspan="12"><div class="empty"><div class="empty-icon">⛽</div><div>Brak wyników</div></div></td></tr>';return;}
     const byVehicle={};
     refuels.forEach(r=>{(byVehicle[r.vehicle_id]=byVehicle[r.vehicle_id]||[]).push(r);});
     _consMap={};
@@ -274,7 +277,7 @@ async function loadRefuels() {
     });
     _refuelsCache=[...refuels];
     renderRefuels(refuels);
-  } catch(err){tbody.innerHTML='<tr><td colspan="11"><div class="empty">Błąd</div></td></tr>';}
+  } catch(err){tbody.innerHTML='<tr><td colspan="12"><div class="empty">Błąd</div></td></tr>';}
 }
 
 /* ─── REPORTS ─── */
@@ -567,12 +570,18 @@ async function loadRefuelsData() {
   const tbody=$('refuels-table');
   try {
     const refuels=await api('GET',`/refuels?${params}`);
-    if(!refuels.length){tbody.innerHTML='<tr><td colspan="11"><div class="empty"><div class="empty-icon">⛽</div><div>Brak wyników</div></div></td></tr>';return;}
+    if(!refuels.length){tbody.innerHTML='<tr><td colspan="12"><div class="empty"><div class="empty-icon">⛽</div><div>Brak wyników</div></div></td></tr>';return;}
     const byVehicle={};
     refuels.forEach(r=>{(byVehicle[r.vehicle_id]=byVehicle[r.vehicle_id]||[]).push(r);});
-    _consMap={};
+    _consMap={}; _distMap={};
     Object.keys(byVehicle).forEach(vid=>{
       const arr=(byVehicle[vid]||[]).filter(x=>x.mileage).sort((a,b)=>a.mileage-b.mileage);
+      // ODCINEK: km od poprzedniego tankowania (dowolny typ tankowania)
+      for(let i=1;i<arr.length;i++){
+        const d=arr[i].mileage-arr[i-1].mileage;
+        if(d>0&&d<5000) _distMap[arr[i].id]=d;
+      }
+      // SPALANIE: tylko pelne-do-pelnego, bez partiala pomiedzy
       for(let i=1;i<arr.length;i++){
         const cur=arr[i], prv=arr[i-1];
         if(cur.is_full===false||prv.is_full===false) continue;
@@ -600,6 +609,7 @@ async function loadRefuelsData() {
         <td class="mono">${r.price_per_l?fmtNum(r.price_per_l,3)+' zł':'—'}</td>
         <td class="mono" style="color:var(--accent)">${r.total?fmtNum(r.total,2)+' zł':'—'}</td>
         <td class="mono">${r.mileage?fmtNum(r.mileage)+' km':'—'}</td>
+        <td class="mono" style="color:var(--text2)">${_distMap[r.id]?fmtNum(_distMap[r.id])+' km':'—'}</td>
         <td>${consBadge(cons)}</td>
         <td style="font-size:12px;color:var(--text2)">${r.station||'—'}</td>
         <td style="white-space:nowrap">
@@ -608,7 +618,7 @@ async function loadRefuelsData() {
         </td>
       </tr>`;
     }).join('');
-  } catch(err){tbody.innerHTML='<tr><td colspan="11"><div class="empty">Błąd</div></td></tr>';}
+  } catch(err){tbody.innerHTML='<tr><td colspan="12"><div class="empty">Błąd</div></td></tr>';}
 }
 
 async function deleteRefuel(id) {
