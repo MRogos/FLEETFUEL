@@ -381,7 +381,7 @@
     <div class="form-row">
       <label>Plik faktury (PDF, Excel, zdjecie/screen lub CSV) *</label>
       <input type="file" id="inv-file" accept=".pdf,.xlsx,.xls,.csv,.jpg,.jpeg,.png,.webp,image/*" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--sans);font-size:13px;padding:8px;border-radius:7px;width:100%">
-      <div style="font-size:10px;color:var(--text3);margin-top:4px">PDF/Excel/zdjecie -> odczyt AI. CSV -> odczyt bezposredni (Citronex bez tablic na fakturze). Format CSV: <span style="font-family:var(--mono)">tablica;litry;netto;brutto;rabat</span> (naglowek opcjonalny, separator , lub ;).</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:4px">PDF/Excel/zdjecie -> odczyt AI. CSV -> odczyt bezposredni, agregacja per auto (Citronex bez tablic na fakturze). Wklada sie caly eksport transakcji Citronex (kolumny "Numer rejestracyjny", "Ilosc", "Rabat brutto"...) albo prosty: <span style="font-family:var(--mono)">tablica;litry;netto;brutto;rabat_zl</span>. Separator , lub ;, naglowek opcjonalny.</div>
     </div>
     <div id="inv-analyzing" style="display:none;align-items:center;gap:10px;margin:12px 0;color:var(--text2);font-size:13px">
       <div class="spinner"></div><span>Claude analizuje fakture...</span>
