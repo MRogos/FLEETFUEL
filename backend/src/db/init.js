@@ -136,6 +136,12 @@ async function initDB() {
       END $$;
     `);
 
+    // Krok 6b: migracja rabatu w invoice_items (discount_per_l = rabat/L w PLN, discount_amount = laczny rabat w PLN)
+    await client.query(`
+      ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS discount_per_l  NUMERIC(8,4);
+      ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS discount_amount NUMERIC(10,2);
+    `);
+
     // Krok 7: indeksy (dopiero po wszystkich kolumnach)
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_refuels_vehicle_id ON refuels(vehicle_id);
