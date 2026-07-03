@@ -776,19 +776,20 @@ async function loadSuppliers() {
 async function loadInvoices() {
   const month=$('inv-filter-month')?$('inv-filter-month').value:'';
   const tbody=$('invoices-table'); if(!tbody) return;
-  tbody.innerHTML='<tr><td colspan="8"><div class="loading">Ładowanie...</div></td></tr>';
+  tbody.innerHTML='<tr><td colspan="9"><div class="loading">Ładowanie...</div></td></tr>';
   try{
     const data=await api('GET','/invoices'+(month?'?month='+month:''));
-    if(!data||!data.length){tbody.innerHTML='<tr><td colspan="8"><div class="empty"><div class="empty-icon">🧾</div><div>Brak faktur.</div></div></td></tr>';return;}
+    if(!data||!data.length){tbody.innerHTML='<tr><td colspan="9"><div class="empty"><div class="empty-icon">🧾</div><div>Brak faktur.</div></div></td></tr>';return;}
     tbody.innerHTML=data.map(inv=>`<tr>
       <td class="mono">${inv.month}</td><td><strong>${inv.supplier_name}</strong></td>
       <td style="color:var(--text2);font-size:12px">${inv.invoice_no||'—'}</td>
       <td class="mono">${inv.item_count}</td><td class="mono">${fmtNum(inv.total_liters,2)} L</td>
       <td class="mono">${fmtNum(inv.total_net,2)} zł</td>
       <td class="mono" style="color:var(--accent)">${fmtNum(inv.total_gross,2)} zł</td>
+      <td class="mono" style="color:${inv.total_discount>0?'#2ecc71':'var(--text3)'}">${inv.total_discount>0?fmtNum(inv.total_discount,2)+' zł':'—'}</td>
       <td><button class="btn-danger" onclick="deleteInvoice(${inv.id})">✕</button></td>
     </tr>`).join('');
-  }catch(e){tbody.innerHTML='<tr><td colspan="8"><div class="empty">Błąd</div></td></tr>';}
+  }catch(e){tbody.innerHTML='<tr><td colspan="9"><div class="empty">Błąd</div></td></tr>';}
 }
 
 async function deleteInvoice(id) {
@@ -920,11 +921,15 @@ document.addEventListener('DOMContentLoaded', function() {
         <td><input type="number" value="${item.liters||''}" data-i="${i}" data-field="liters" step="0.01" style="width:80px;background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:4px 6px;border-radius:4px;font-family:var(--mono);font-size:12px"></td>
         <td><input type="number" value="${item.net_amount||''}" data-i="${i}" data-field="net_amount" step="0.01" style="width:90px;background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:4px 6px;border-radius:4px;font-family:var(--mono);font-size:12px"></td>
         <td><input type="number" value="${item.gross_amount||''}" data-i="${i}" data-field="gross_amount" step="0.01" style="width:90px;background:var(--bg3);border:1px solid var(--border2);color:var(--accent);padding:4px 6px;border-radius:4px;font-family:var(--mono);font-size:12px"></td>
+        <td><input type="number" value="${item.discount_per_l||''}" data-i="${i}" data-field="discount_per_l" step="0.0001" placeholder="0" style="width:70px;background:var(--bg3);border:1px solid var(--border2);color:#2ecc71;padding:4px 6px;border-radius:4px;font-family:var(--mono);font-size:12px"></td>
         <td style="font-size:11px;color:var(--text2)">${item.vehicle_name||'<span style="color:var(--text3)">nie dopasowano</span>'}</td>
       </tr>`).join('');
       tbody.querySelectorAll('input').forEach(inp=>inp.addEventListener('change',function(){
         const i=parseInt(this.dataset.i),field=this.dataset.field;
         invoiceScannedItems[i][field]=field==='plate'?this.value:parseFloat(this.value);
+        // przelicz laczny rabat po zmianie rabatu/L lub litrow
+        const it=invoiceScannedItems[i];
+        it.discount_amount=(it.discount_per_l&&it.liters)?Math.round(it.discount_per_l*it.liters*100)/100:null;
       }));
       $('inv-result').style.display='block'; $('btn-save-invoice').style.display='';
       showToast(`Odczytano ${invoiceScannedItems.length} pozycji`);
