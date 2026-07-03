@@ -6,6 +6,13 @@ const { pool } = require('../db/init');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+// Usuwa polskie ogonki do dopasowania naglowkow (ilość -> ilosc itd.)
+function deacc(s) {
+  return String(s).toLowerCase()
+    .replace(/ą/g,'a').replace(/ć/g,'c').replace(/ę/g,'e').replace(/ł/g,'l')
+    .replace(/ń/g,'n').replace(/ó/g,'o').replace(/ś/g,'s').replace(/ż/g,'z').replace(/ź/g,'z');
+}
+
 // Parsuje liczbe z CSV: obsluguje polski przecinek dziesietny, spacje jako separator tysiecy, symbole walut
 function parseNum(s) {
   if (s == null) return null;
@@ -17,42 +24,59 @@ function parseNum(s) {
   return isNaN(n) ? null : n;
 }
 
-// Parsuje CSV faktury (np. Citronex) -> [{plate, liters, net, gross, discount}]
-// Wykrywa delimiter (; lub ,), naglowek i mapuje kolumny po nazwie (PL/EN). Bez naglowka: plate;liters;net;gross;discount
+// Parsuje CSV faktury/transakcji (Citronex, DKV itp.) -> agreguje per auto
+// -> [{plate, liters, net, gross, discount_amount}]. Wykrywa delimiter, ogonki, kolumny po nazwie.
+// Prosty format bez naglowka: plate;liters;net;gross;rabat_na_litr
 function parseInvoiceCsv(text) {
   const lines = text.replace(/\r/g, '').split('\n').filter(l => l.trim() !== '');
   if (!lines.length) return [];
   const delim = (lines[0].match(/;/g) || []).length >= (lines[0].match(/,/g) || []).length ? ';' : ',';
   const rows = lines.map(l => l.split(delim).map(c => c.trim().replace(/^"|"$/g, '')));
-  const header = rows[0].map(h => h.toLowerCase());
-  const isHeader = header.some(h => /plate|tablic|rejestr|pojazd|auto|litr|ilos|liters|netto|net|brutto|gross|rabat|discount|upust/.test(h));
-  let col = { plate: 0, liters: 1, net: 2, gross: 3, discount: 4 };
+  const header = rows[0].map(deacc);
+  const isHeader = header.some(h => /plate|tablic|rejestr|pojazd|auto|litr|ilosc|liters|netto|brutto|gross|rabat|discount|upust/.test(h));
+
+  let col = { plate: 0, liters: 1, net: 2, gross: 3, disc: 4 };
   let data = rows;
+
   if (isHeader) {
     const find = (...keys) => header.findIndex(h => keys.some(k => h.includes(k)));
+    // rabat: tylko kolumny zaczynajace sie od "rabat"/"upust"/"discount" albo "kwota/wartosc rabatu"
+    // (zeby NIE zlapac "cena brutto przed rabatem" / "kwota brutto po rabacie")
+    const cDisc = header.findIndex(h =>
+      h.startsWith('rabat') || h.startsWith('upust') || h.startsWith('discount') || /kwota\s*rabat|wartosc\s*rabat/.test(h));
     col = {
-      plate:    find('plate', 'tablic', 'rejestr', 'pojazd', 'auto', 'nr rej'),
-      liters:   find('litr', 'ilos', 'liters'),
-      net:      find('netto', 'net'),
-      gross:    find('brutto', 'gross'),
-      discount: find('rabat', 'discount', 'upust')
+      plate:  find('rejestr', 'tablic', 'plate', 'pojazd', 'nr rej'), // "numer rejestracyjny" (pierwsze trafienie)
+      liters: find('ilosc', 'litr', 'liters'),
+      net:    find('netto', 'net'),
+      gross:  find('brutto', 'gross'),
+      disc:   cDisc
     };
     data = rows.slice(1);
   }
+
   const get = (r, i) => (i >= 0 && i < r.length) ? r[i] : null;
-  const out = [];
+  const agg = {};
   data.forEach(r => {
     const plate = (get(r, col.plate) || '').toString().trim();
     if (!plate) return;
-    out.push({
-      plate,
-      liters:   parseNum(get(r, col.liters)),
-      net:      parseNum(get(r, col.net)),
-      gross:    parseNum(get(r, col.gross)),
-      discount: parseNum(get(r, col.discount))
-    });
+    const key = plate.toUpperCase().replace(/\s/g, '');
+    const L = parseNum(get(r, col.liters));
+    const net = parseNum(get(r, col.net));
+    const gross = parseNum(get(r, col.gross));
+    const dAmount = parseNum(get(r, col.disc)); // rabat = kwota (laczna na transakcje)
+    const a = agg[key] || (agg[key] = { plate, liters: 0, net: 0, gross: 0, discount_amount: 0, any: false, anyDisc: false });
+    if (L != null)       { a.liters += L; a.any = true; }
+    if (net != null)     { a.net += net; a.any = true; }
+    if (gross != null)   { a.gross += gross; a.any = true; }
+    if (dAmount != null) { a.discount_amount += dAmount; a.anyDisc = true; }
   });
-  return out;
+  return Object.values(agg).map(a => ({
+    plate: a.plate,
+    liters: a.any ? Math.round(a.liters * 1000) / 1000 : null,
+    net: a.net || null,
+    gross: a.gross || null,
+    discount_amount: a.anyDisc ? Math.round(a.discount_amount * 100) / 100 : null
+  }));
 }
 
 router.get('/suppliers', async (req, res, next) => {
@@ -179,10 +203,25 @@ router.post('/scan', upload.single('file'), async (req, res, next) => {
 
     const isCsv = req.file.mimetype === 'text/csv' || req.file.originalname.match(/\.csv$/i);
 
-    // ── Sciezka CSV (Citronex itp.) — deterministycznie, bez AI ──
+    // ── Sciezka CSV (Citronex itp.) — deterministycznie, bez AI, rabat jako kwota ──
     if (isCsv) {
       const rows = parseInvoiceCsv(req.file.buffer.toString('utf8'));
-      const items = rows.map(r => buildItem(r.plate, r.liters, r.net, r.gross, null, ratePerL(r.discount)));
+      const items = rows.map(r => {
+        const vehicle = plateMap[(r.plate || '').toUpperCase().replace(/\s/g,'')];
+        const L = r.liters;
+        const netPln = toPln(r.net), grossPln = toPln(r.gross), discPln = toPln(r.discount_amount);
+        return {
+          plate: r.plate,
+          vehicle_id: vehicle ? vehicle.id : null,
+          vehicle_name: vehicle ? vehicle.name : null,
+          liters: L,
+          net_amount: netPln,
+          gross_amount: grossPln,
+          price_per_l: (grossPln && L) ? Math.round(grossPln / L * 1000) / 1000 : null,
+          discount_per_l: (discPln != null && L) ? Math.round(discPln / L * 10000) / 10000 : null,
+          discount_amount: discPln
+        };
+      });
       return res.json({ ok: true, items, supplier, currency, eur_rate: eurRate, source: 'csv' });
     }
 
