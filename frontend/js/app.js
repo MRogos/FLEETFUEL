@@ -145,16 +145,29 @@ async function updateFleetCount() {
 /* ─── DASHBOARD ─── */
 async function loadDashboard() {
   try {
+    const month = $('dash-month') ? $('dash-month').value : '';
+    const q = month ? '?month='+month : '';
     const [dash,monthly,perVehicle,refuels]=await Promise.all([
-      api('GET','/stats/dashboard'),
+      api('GET','/stats/dashboard'+q),
       api('GET','/stats/monthly'),
-      api('GET','/stats/vehicles'),
+      api('GET','/stats/vehicles'+q),
       api('GET','/refuels'),
     ]);
+    // wypelnij selektor miesiaca (raz) z dostepnych miesiecy tankowan
+    const sel=$('dash-month');
+    if(sel && !sel.dataset.filled){
+      const months=[...new Set(refuels.map(r=>String(r.date).slice(0,7)))].filter(Boolean).sort().reverse();
+      sel.innerHTML='<option value="">Wszystko (lacznie)</option>'+months.map(m=>`<option value="${m}">${m}</option>`).join('');
+      sel.dataset.filled='1';
+      if(month) sel.value=month;
+    }
     $('dash-vehicles').textContent=fmtNum(dash.vehicle_count);
     $('dash-refuels').textContent=fmtNum(dash.refuel_count);
     $('dash-liters').textContent=fmtNum(dash.total_liters,2);
     $('dash-cost').textContent=fmtNum(dash.total_cost,2);
+    // etykiety okresu na kartach
+    const ru=$('dash-refuels')&&$('dash-refuels').nextElementSibling; if(ru) ru.textContent = month ? 'w '+month : 'lacznie';
+    const cu=$('dash-cost')&&$('dash-cost').nextElementSibling; if(cu) cu.textContent = month ? 'PLN w '+month : 'PLN lacznie';
 
     const chartEl=$('monthly-chart');
     if(!monthly.length){chartEl.innerHTML='<div class="empty"><div>Brak danych</div></div>';}
@@ -163,7 +176,9 @@ async function loadDashboard() {
       chartEl.innerHTML=monthly.map(m=>{
         const h=max>0?Math.max(4,(m.total_cost/max*100)).toFixed(1):4;
         const label=m.month.slice(5)+'/'+m.month.slice(2,4);
-        return `<div class="bar-wrap"><div class="bar-val">${fmtNum(m.total_cost,0)}</div><div class="bar" style="height:${h}%" title="${fmtNum(m.total_cost,2)} PLN"></div><div class="bar-label">${label}</div></div>`;
+        const isSel=month&&m.month===month;
+        const barStyle=`height:${h}%`+(isSel?';background:var(--accent);box-shadow:0 0 0 1px var(--accent)':'');
+        return `<div class="bar-wrap"><div class="bar-val"${isSel?' style="color:var(--accent);font-weight:700"':''}>${fmtNum(m.total_cost,0)}</div><div class="bar" style="${barStyle}" title="${fmtNum(m.total_cost,2)} PLN"></div><div class="bar-label"${isSel?' style="color:var(--accent)"':''}>${label}</div></div>`;
       }).join('');
     }
 
@@ -181,7 +196,7 @@ async function loadDashboard() {
     }
 
     const tbody=$('dash-refuels-table');
-    const recent=refuels.slice(0,8);
+    const recent=(month?refuels.filter(r=>String(r.date).slice(0,7)===month):refuels).slice(0,8);
     if(!recent.length){tbody.innerHTML='<tr><td colspan="7"><div class="empty"><div>Brak tankowań</div></div></td></tr>';}
     else tbody.innerHTML=recent.map(r=>`
       <tr>
@@ -885,6 +900,7 @@ document.addEventListener('DOMContentLoaded', function() {
   });
   $('btn-add-driver')&&$('btn-add-driver').addEventListener('click',addDriver);
   $('mileage-month')&&$('mileage-month').addEventListener('change',function(){loadMonthlyMileage(this.value);});
+  $('dash-month')&&$('dash-month').addEventListener('change',loadDashboard);
   $('report-month')&&$('report-month').addEventListener('change',loadReports);
   $('btn-add-invoice')&&$('btn-add-invoice').addEventListener('click',()=>{
     invoiceScannedItems=[];
