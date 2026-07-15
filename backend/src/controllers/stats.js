@@ -2,7 +2,7 @@ const { pool } = require('../db/init');
 
 const dashboard = async (req, res, next) => {
   try {
-    const { month } = req.query;
+    const month = /^\d{4}-\d{2}$/.test(req.query.month) ? req.query.month : null;
     const where = month ? `WHERE TO_CHAR(date,'YYYY-MM') = '${month}'` : '';
     const [vehicles, refuels, costs] = await Promise.all([
       pool.query('SELECT COUNT(*)::int AS count FROM vehicles'),
@@ -35,7 +35,7 @@ const monthly = async (req, res, next) => {
 
 const perVehicle = async (req, res, next) => {
   try {
-    const { month } = req.query;
+    const month = /^\d{4}-\d{2}$/.test(req.query.month) ? req.query.month : null;
     const having = month ? `AND TO_CHAR(r.date,'YYYY-MM') = '${month}'` : '';
     const { rows } = await pool.query(`
       SELECT v.id, v.name, v.plate, v.fuel_type,
