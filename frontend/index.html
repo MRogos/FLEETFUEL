@@ -36,7 +36,12 @@
 
 <!-- DASHBOARD -->
 <section class="section active" id="section-dashboard">
-  <div class="page-title">Przeglad floty</div>
+  <div class="section-header">
+    <div class="page-title" style="margin-bottom:0">Przeglad floty</div>
+    <select id="dash-month" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);font-family:var(--sans);font-size:13px;padding:7px 12px;border-radius:6px;outline:none;min-width:150px">
+      <option value="">Wszystko (lacznie)</option>
+    </select>
+  </div>
   <div class="stats-row">
     <div class="stat-card"><div class="stat-label">Pojazdy</div><div class="stat-value" id="dash-vehicles">-</div><div class="stat-unit">w flocie</div></div>
     <div class="stat-card green"><div class="stat-label">Tankowania</div><div class="stat-value" id="dash-refuels">-</div><div class="stat-unit">lacznie</div></div>
