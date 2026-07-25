@@ -15,6 +15,7 @@ const statsRouter = require('./routes/stats');
 const scanRouter = require('./routes/scan');
 const invoicesRouter = require('./routes/invoices');
 const driversRouter = require('./routes/drivers');
+const exportRouter = require('./routes/export');
 const requireAuth = require('./middleware/auth');
 
 const app = express();
@@ -35,6 +36,7 @@ app.use(session({
 }));
 
 app.use('/api/auth', authRouter);
+app.use('/api/export', exportRouter);
 app.use(express.static(path.join(__dirname, '../../frontend')));
 app.use(requireAuth);
 app.use('/api/vehicles', vehiclesRouter);
