@@ -281,14 +281,14 @@ async function loadRefuels() {
     Object.keys(byVehicle).forEach(vid=>{
       const arr=(byVehicle[vid]||[]).filter(x=>x.mileage).sort((a,b)=>a.mileage-b.mileage);
       for(let i=1;i<arr.length;i++){const d=arr[i].mileage-arr[i-1].mileage;if(d>0&&d<5000)_distMap[arr[i].id]=d;}
-      for(let i=1;i<arr.length;i++){
-        const cur=arr[i], prv=arr[i-1];
-        if(cur.is_full===false||prv.is_full===false) continue;
-        const prvIdx=arr.indexOf(prv);
-        const hasPartial=arr.some((x,j)=>j>prvIdx&&j<i&&x.is_full===false);
-        if(hasPartial) continue;
-        const dist=cur.mileage-prv.mileage;
-        if(dist>0&&dist<5000) _consMap[cur.id]=parseFloat(cur.liters)/dist*100;
+      for(let i=0;i<arr.length;i++){
+        if(arr[i].is_full===false) continue;
+        let j=i-1; while(j>=0 && arr[j].is_full===false) j--;
+        if(j<0) continue;
+        const dist=arr[i].mileage-arr[j].mileage;
+        if(dist<=0||dist>=5000) continue;
+        let lit=0; for(let k=j+1;k<=i;k++) lit+=parseFloat(arr[k].liters)||0;
+        if(lit>0) _consMap[arr[i].id]=lit/dist*100;
       }
     });
     _refuelsCache=[...refuels];
@@ -598,14 +598,14 @@ async function loadRefuelsData() {
         if(d>0&&d<5000) _distMap[arr[i].id]=d;
       }
       // SPALANIE: tylko pelne-do-pelnego, bez partiala pomiedzy
-      for(let i=1;i<arr.length;i++){
-        const cur=arr[i], prv=arr[i-1];
-        if(cur.is_full===false||prv.is_full===false) continue;
-        const prvIdx=arr.indexOf(prv);
-        const hasPartial=arr.some((x,j)=>j>prvIdx&&j<i&&x.is_full===false);
-        if(hasPartial) continue;
-        const dist=cur.mileage-prv.mileage;
-        if(dist>0&&dist<5000) _consMap[cur.id]=parseFloat(cur.liters)/dist*100;
+      for(let i=0;i<arr.length;i++){
+        if(arr[i].is_full===false) continue;
+        let j=i-1; while(j>=0 && arr[j].is_full===false) j--;
+        if(j<0) continue;
+        const dist=arr[i].mileage-arr[j].mileage;
+        if(dist<=0||dist>=5000) continue;
+        let lit=0; for(let k=j+1;k<=i;k++) lit+=parseFloat(arr[k].liters)||0;
+        if(lit>0) _consMap[arr[i].id]=lit/dist*100;
       }
     });
     const sorted=[...refuels].sort((a,b)=>{
