@@ -277,9 +277,10 @@ async function loadRefuels() {
     if(!refuels.length){tbody.innerHTML='<tr><td colspan="12"><div class="empty"><div class="empty-icon">⛽</div><div>Brak wyników</div></div></td></tr>';return;}
     const byVehicle={};
     refuels.forEach(r=>{(byVehicle[r.vehicle_id]=byVehicle[r.vehicle_id]||[]).push(r);});
-    _consMap={};
+    _consMap={}; _distMap={};
     Object.keys(byVehicle).forEach(vid=>{
       const arr=(byVehicle[vid]||[]).filter(x=>x.mileage).sort((a,b)=>a.mileage-b.mileage);
+      for(let i=1;i<arr.length;i++){const d=arr[i].mileage-arr[i-1].mileage;if(d>0&&d<5000)_distMap[arr[i].id]=d;}
       for(let i=1;i<arr.length;i++){
         const cur=arr[i], prv=arr[i-1];
         if(cur.is_full===false||prv.is_full===false) continue;
@@ -653,9 +654,20 @@ async function populateVehicleSelect(selectId, keepAll=false) {
   }catch(e){}
 }
 
-$('r-liters').addEventListener('input',()=>{const l=parseFloat($('r-liters').value),p=parseFloat($('r-price').value);if(!isNaN(l)&&!isNaN(p))$('r-total').value=(l*p).toFixed(2);});
-$('r-price').addEventListener('input',()=>{const l=parseFloat($('r-liters').value),p=parseFloat($('r-price').value);if(!isNaN(l)&&!isNaN(p))$('r-total').value=(l*p).toFixed(2);});
-$('r-total').addEventListener('input',()=>{const l=parseFloat($('r-liters').value),t=parseFloat($('r-total').value);if(!isNaN(l)&&!isNaN(t)&&l>0)$('r-price').value=(t/l).toFixed(3);});
+let _refuelAnchor='price';
+function calcRefuel(edited){
+  const l=parseFloat($('r-liters').value), p=parseFloat($('r-price').value), t=parseFloat($('r-total').value);
+  if(edited==='price'){ _refuelAnchor='price'; if(!isNaN(l)&&!isNaN(p)&&l>0) $('r-total').value=(l*p).toFixed(2); }
+  else if(edited==='total'){ _refuelAnchor='total'; if(!isNaN(l)&&!isNaN(t)&&l>0) $('r-price').value=(t/l).toFixed(3); }
+  else if(edited==='liters'){
+    if(_refuelAnchor==='total'){ if(!isNaN(t)&&l>0) $('r-price').value=(t/l).toFixed(3); }
+    else if(!isNaN(p)&&l>0) $('r-total').value=(l*p).toFixed(2);
+    else if(!isNaN(t)&&l>0) $('r-price').value=(t/l).toFixed(3);
+  }
+}
+$('r-liters').addEventListener('input',()=>calcRefuel('liters'));
+$('r-price').addEventListener('input',()=>calcRefuel('price'));
+$('r-total').addEventListener('input',()=>calcRefuel('total'));
 
 /* ─── EXPORT CSV ─── */
 async function exportCSV() {
