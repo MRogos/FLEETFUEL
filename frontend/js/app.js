@@ -21,8 +21,8 @@ async function api(method, path, body) {
 }
 
 function fuelBadge(type) {
-  const colors={PB95:'#3498db',PB98:'#9b59b6',ON:'#00d4c8',LPG:'#2ecc71',EV:'#1abc9c'};
-  return `<span class="badge badge-fuel"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${colors[type]||'#666'};margin-right:4px"></span>${type}</span>`;
+  const colors={PB95:'#3498db',PB98:'#9b59b6',ON:'#00d4c8',LPG:'#2ecc71',EV:'#1abc9c',ADBLUE:'#5b8def'};
+  return `<span class="badge badge-fuel"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${colors[type]||'#666'};margin-right:4px"></span>${type==='ADBLUE'?'AdBlue':type}</span>`;
 }
 
 function consBadge(val) {
@@ -276,7 +276,7 @@ async function loadRefuels() {
     const refuels=await api('GET',`/refuels?${params}`);
     if(!refuels.length){tbody.innerHTML='<tr><td colspan="12"><div class="empty"><div class="empty-icon">⛽</div><div>Brak wyników</div></div></td></tr>';return;}
     const byVehicle={};
-    refuels.forEach(r=>{(byVehicle[r.vehicle_id]=byVehicle[r.vehicle_id]||[]).push(r);});
+    refuels.forEach(r=>{if(r.fuel_type==='ADBLUE')return;(byVehicle[r.vehicle_id]=byVehicle[r.vehicle_id]||[]).push(r);});
     _consMap={}; _distMap={};
     Object.keys(byVehicle).forEach(vid=>{
       const arr=(byVehicle[vid]||[]).filter(x=>x.mileage).sort((a,b)=>a.mileage-b.mileage);
@@ -588,7 +588,7 @@ async function loadRefuelsData() {
     const refuels=await api('GET',`/refuels?${params}`);
     if(!refuels.length){tbody.innerHTML='<tr><td colspan="12"><div class="empty"><div class="empty-icon">⛽</div><div>Brak wyników</div></div></td></tr>';return;}
     const byVehicle={};
-    refuels.forEach(r=>{(byVehicle[r.vehicle_id]=byVehicle[r.vehicle_id]||[]).push(r);});
+    refuels.forEach(r=>{if(r.fuel_type==='ADBLUE')return;(byVehicle[r.vehicle_id]=byVehicle[r.vehicle_id]||[]).push(r);});
     _consMap={}; _distMap={};
     Object.keys(byVehicle).forEach(vid=>{
       const arr=(byVehicle[vid]||[]).filter(x=>x.mileage).sort((a,b)=>a.mileage-b.mileage);

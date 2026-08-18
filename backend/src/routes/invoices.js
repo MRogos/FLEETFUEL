@@ -115,7 +115,7 @@ router.get('/comparison', async (req, res, next) => {
         COUNT(r.id)::int AS refuel_count
       FROM vehicles v
       LEFT JOIN refuels r ON r.vehicle_id = v.id
-        AND TO_CHAR(r.date,'YYYY-MM') = $1
+        AND TO_CHAR(r.date,'YYYY-MM') = $1 AND r.fuel_type <> 'ADBLUE'
       GROUP BY v.id, v.name, v.plate
       ORDER BY v.plate
     `, [currentMonth]);

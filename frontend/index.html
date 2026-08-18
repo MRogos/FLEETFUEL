@@ -98,7 +98,7 @@
     <select id="filter-vehicle"><option value="">Wszystkie pojazdy</option></select>
     <select id="filter-fuel">
       <option value="">Wszystkie paliwa</option>
-      <option>PB95</option><option>PB98</option><option value="ON">ON (diesel)</option><option>LPG</option><option>EV</option>
+      <option>PB95</option><option>PB98</option><option value="ON">ON (diesel)</option><option>LPG</option><option>EV</option><option value="ADBLUE">AdBlue</option>
     </select>
     <input type="month" id="filter-month">
   </div>
@@ -278,7 +278,7 @@
     <div class="form-cols">
       <div class="form-row"><label>Data *</label><input type="date" id="r-date"></div>
       <div class="form-row"><label>Rodzaj paliwa</label>
-        <select id="r-fuel"><option value="ON">ON (diesel)</option><option value="PB95">PB95</option><option value="PB98">PB98</option><option value="LPG">LPG</option><option value="EV">Prad (kWh)</option></select>
+        <select id="r-fuel"><option value="ON">ON (diesel)</option><option value="PB95">PB95</option><option value="PB98">PB98</option><option value="LPG">LPG</option><option value="EV">Prad (kWh)</option><option value="ADBLUE">AdBlue</option></select>
       </div>
     </div>
     <div class="form-cols">
@@ -341,7 +341,7 @@
         <div><div class="scan-field-label">Lacznie PLN</div><input type="number" id="sr-total" step="0.01" style="width:100%;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:14px;padding:6px 10px;border-radius:6px;outline:none"></div>
         <div><div class="scan-field-label">Paliwo</div>
           <select id="sr-fuel" style="width:100%;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--sans);font-size:13px;padding:6px 10px;border-radius:6px;outline:none">
-            <option value="ON">ON (diesel)</option><option value="PB95">PB95</option><option value="PB98">PB98</option><option value="LPG">LPG</option><option value="EV">EV</option>
+            <option value="ON">ON (diesel)</option><option value="PB95">PB95</option><option value="PB98">PB98</option><option value="LPG">LPG</option><option value="EV">EV</option><option value="ADBLUE">AdBlue</option>
           </select>
         </div>
         <div><div class="scan-field-label">Stacja</div><input type="text" id="sr-station" style="width:100%;background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:var(--sans);font-size:13px;padding:6px 10px;border-radius:6px;outline:none"></div>

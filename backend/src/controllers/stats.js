@@ -3,7 +3,7 @@ const { pool } = require('../db/init');
 const dashboard = async (req, res, next) => {
   try {
     const month = /^\d{4}-\d{2}$/.test(req.query.month) ? req.query.month : null;
-    const where = month ? `WHERE TO_CHAR(date,'YYYY-MM') = '${month}'` : '';
+    const where = month ? `WHERE fuel_type <> 'ADBLUE' AND TO_CHAR(date,'YYYY-MM') = '${month}'` : "WHERE fuel_type <> 'ADBLUE'";
     const [vehicles, refuels, costs] = await Promise.all([
       pool.query('SELECT COUNT(*)::int AS count FROM vehicles'),
       pool.query(`SELECT COUNT(*)::int AS count FROM refuels ${where}`),
@@ -26,7 +26,7 @@ const monthly = async (req, res, next) => {
         COALESCE(SUM(total),0)::float AS total_cost,
         COUNT(*)::int AS refuel_count
       FROM refuels
-      WHERE date >= NOW() - INTERVAL '12 months'
+      WHERE date >= NOW() - INTERVAL '12 months' AND fuel_type <> 'ADBLUE'
       GROUP BY month ORDER BY month
     `);
     res.json(rows);
@@ -47,13 +47,13 @@ const perVehicle = async (req, res, next) => {
         MIN(r.mileage) AS min_mileage,
         MAX(r.mileage) AS max_mileage
       FROM vehicles v
-      LEFT JOIN refuels r ON r.vehicle_id = v.id ${having}
+      LEFT JOIN refuels r ON r.vehicle_id = v.id AND r.fuel_type <> 'ADBLUE' ${having}
       GROUP BY v.id ORDER BY v.plate
     `);
     // Spalanie zawsze z wszystkich danych (nie filtrowane po miesiacu)
     for (const row of rows) {
       const { rows: vr } = await pool.query(
-        'SELECT liters, mileage, is_full FROM refuels WHERE vehicle_id=$1 AND mileage IS NOT NULL ORDER BY mileage',
+        `SELECT liters, mileage, is_full FROM refuels WHERE vehicle_id=$1 AND mileage IS NOT NULL AND fuel_type <> 'ADBLUE' ORDER BY mileage`,
         [row.id]
       );
       if (vr.length >= 2) {
