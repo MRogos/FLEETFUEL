@@ -210,7 +210,38 @@ async function loadDashboard() {
       </tr>`).join('');
 
     loadVehicleMonthlyChart();
+    loadFuelPrices();
   } catch(err){console.error('Dashboard:',err);}
+}
+
+async function loadFuelPrices(){
+  const tbody=$('fuel-prices-table'); if(!tbody) return;
+  try{
+    const prices=await api('GET','/scan/prices');
+    tbody.innerHTML=prices.map(p=>{
+      const d=new Date(p.fetched_at), ageH=(Date.now()-d.getTime())/3600000;
+      const when=ageH<20?'dzis':d.toLocaleDateString('pl-PL');
+      const whenCol=ageH<30?'var(--text2)':'#e6a935';
+      return `<tr>
+        <td style="font-weight:700">${p.country}</td>
+        <td class="mono">${fmtNum(p.price_gross,3)} ${p.currency}</td>
+        <td class="mono" style="color:var(--accent);cursor:pointer" title="Klik = reczna korekta" onclick="overrideFuelPrice('${p.country}',${p.price_gross})">${fmtNum(p.price_pln,3)} zł</td>
+        <td class="mono" style="color:var(--text2)">${p.currency==='PLN'?'—':fmtNum(p.rate,4)}</td>
+        <td style="font-size:11px;color:var(--text3)">${p.source||'—'}</td>
+        <td style="font-size:11px;color:${whenCol}">${when}</td>
+        <td>${p.manual?'<span style="font-size:10px;color:#e6a935">ręczna</span>':''}</td>
+      </tr>`;
+    }).join('');
+  }catch(e){tbody.innerHTML='<tr><td colspan="7"><div class="empty">Błąd cen</div></td></tr>';}
+}
+
+async function overrideFuelPrice(country,currentGross){
+  const inp=prompt('Cena BRUTTO lokalna dla '+country+' (waluta lokalna):',currentGross);
+  if(inp===null) return;
+  const val=parseFloat(String(inp).replace(',','.'));
+  if(!val||val<=0){showToast('❌ Zła cena');return;}
+  try{await api('PUT','/scan/prices/'+country,{price_gross:val});showToast('✅ Cena ustawiona');loadFuelPrices();}
+  catch(e){showToast('❌ Błąd');}
 }
 
 /* ─── VEHICLES ─── */
@@ -912,6 +943,12 @@ document.addEventListener('DOMContentLoaded', function() {
   });
   $('btn-add-driver')&&$('btn-add-driver').addEventListener('click',addDriver);
   $('mileage-month')&&$('mileage-month').addEventListener('change',function(){loadMonthlyMileage(this.value);});
+  $('btn-refresh-prices')&&$('btn-refresh-prices').addEventListener('click',async function(){
+    const b=this; b.disabled=true; const old=b.innerHTML; b.textContent='Odswiezam...';
+    try{await api('POST','/scan/prices/refresh',{});showToast('✅ Ceny odswiezone');loadFuelPrices();}
+    catch(e){showToast('❌ Błąd odswiezania');}
+    finally{b.disabled=false; b.innerHTML=old;}
+  });
   $('dash-month')&&$('dash-month').addEventListener('change',loadDashboard);
   $('report-month')&&$('report-month').addEventListener('change',loadReports);
   $('btn-add-invoice')&&$('btn-add-invoice').addEventListener('click',()=>{

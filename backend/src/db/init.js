@@ -142,6 +142,29 @@ async function initDB() {
       ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS discount_amount NUMERIC(10,2);
     `);
 
+    // Krok 6c: ceny paliw dzienne (brutto detaliczne per kraj) + seed aktualnym brutto (wrzesien 2026)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS fuel_prices (
+        country      VARCHAR(2) PRIMARY KEY,
+        price_gross  NUMERIC(8,3) NOT NULL,
+        currency     VARCHAR(3) NOT NULL,
+        source       TEXT,
+        manual       BOOLEAN DEFAULT false,
+        fetched_at   TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    // seed z data 2 dni wstecz -> pierwszy odczyt wymusi swieze pobranie; jak padnie, zostaje aktualne brutto (nie prehistoryczna stala)
+    await client.query(`
+      INSERT INTO fuel_prices (country, price_gross, currency, source, fetched_at) VALUES
+        ('PL', 8.700, 'PLN', 'seed', NOW() - INTERVAL '2 days'),
+        ('DE', 2.130, 'EUR', 'seed', NOW() - INTERVAL '2 days'),
+        ('GB', 1.910, 'GBP', 'seed', NOW() - INTERVAL '2 days'),
+        ('NL', 1.850, 'EUR', 'seed', NOW() - INTERVAL '2 days'),
+        ('BE', 1.850, 'EUR', 'seed', NOW() - INTERVAL '2 days'),
+        ('FR', 1.780, 'EUR', 'seed', NOW() - INTERVAL '2 days')
+      ON CONFLICT (country) DO NOTHING;
+    `);
+
     // Krok 7: indeksy (dopiero po wszystkich kolumnach)
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_refuels_vehicle_id ON refuels(vehicle_id);

@@ -17,6 +17,39 @@ const COUNTRY_CURRENCY = {
   PL: 'PLN', DE: 'EUR', NL: 'EUR', BE: 'EUR', FR: 'EUR', GB: 'GBP'
 };
 
+const { pool } = require('../db/init');
+const VAT_RATES = { PL: 0.23, DE: 0.19, NL: 0.21, BE: 0.21, FR: 0.20, GB: 0.20 };
+
+// Odswieza cene BRUTTO detaliczna kraju i zapisuje w bazie (swiadome pobranie nadpisuje tez reczna korekte)
+async function refreshCountryPrice(country) {
+  const currency = COUNTRY_CURRENCY[country] || 'EUR';
+  const info = await getDieselPrice(country); // detal = brutto
+  if (!info || !info.price) return null;
+  await pool.query(
+    `INSERT INTO fuel_prices (country, price_gross, currency, source, manual, fetched_at)
+     VALUES ($1,$2,$3,$4,false,NOW())
+     ON CONFLICT (country) DO UPDATE SET price_gross=EXCLUDED.price_gross, currency=EXCLUDED.currency, source=EXCLUDED.source, manual=false, fetched_at=NOW()`,
+    [country, info.price, currency, info.source]
+  );
+  return info;
+}
+
+// Zwraca cene BRUTTO z bazy; lazy-odswieza raz dziennie. Reczna korekta nie jest nadpisywana automatycznie.
+async function getStoredPrice(country) {
+  const q = await pool.query('SELECT * FROM fuel_prices WHERE country=$1', [country]);
+  let row = q.rows[0];
+  const stale = !row || (Date.now() - new Date(row.fetched_at).getTime()) > 20 * 3600 * 1000;
+  if (stale && (!row || !row.manual)) {
+    try {
+      const info = await refreshCountryPrice(country);
+      if (info) { const q2 = await pool.query('SELECT * FROM fuel_prices WHERE country=$1', [country]); row = q2.rows[0]; }
+    } catch (e) { console.error('getStoredPrice refresh', country, e.message); }
+  }
+  if (!row) return null;
+  const fresh = (Date.now() - new Date(row.fetched_at).getTime()) <= 20 * 3600 * 1000;
+  return { price: parseFloat(row.price_gross), currency: row.currency, source: (row.manual ? 'reczna korekta' : row.source) + (fresh ? '' : ' (nieodswiezone)'), fetched_at: row.fetched_at, manual: row.manual };
+}
+
 async function getRate(currency) {
   if (currency === 'PLN') return { rate: 1.0, date: null };
   try {
@@ -39,7 +72,7 @@ async function getDieselPrice(country) {
         if (match) { const price = parseFloat(match[1]); if (price > 5 && price < 10) return { price, source: 'Orlen PL (cenypaliw.fyi)' }; }
         const prices = [...html.matchAll(/([5-9]\.[0-9]{2})/g)].map(m => parseFloat(m[1])).filter(p => p > 5.5 && p < 9);
         if (prices.length) return { price: prices[0], source: 'Orlen PL (cenypaliw.fyi)' };
-        return { price: 6.89, source: 'Orlen PL (wartosc orientacyjna)' };
+        return { price: 8.70, source: 'Orlen PL (wartosc orientacyjna)' };
       }
       case 'DE': {
         const apiKey = process.env.TANKERKOENIG_API_KEY;
@@ -60,41 +93,41 @@ async function getDieselPrice(country) {
         const html3 = await res3.text();
         const match3 = html3.match(/Diesel[^0-9]*?([1-2]\.[0-9]{2,3})/i);
         if (match3) { const price = parseFloat(match3[1]); if (price > 1.2 && price < 2.5) return { price, source: 'Srednia DE (fuel-prices.eu)' }; }
-        return { price: 1.65, source: 'Niemcy DE (wartosc orientacyjna)' };
+        return { price: 2.13, source: 'Niemcy DE (wartosc orientacyjna)' };
       }
       case 'FR': {
         const res = await fetch('https://www.fuel-prices.eu/live/france/', { headers: { 'User-Agent': 'Mozilla/5.0' } });
         const html = await res.text();
         const match = html.match(/Diesel[^0-9]*?([1-2]\.[0-9]{2,3})/i);
         if (match) { const price = parseFloat(match[1]); if (price > 1.5 && price < 2.5) return { price, source: 'Srednia FR (fuel-prices.eu)' }; }
-        return { price: 2.08, source: 'Francja FR (wartosc orientacyjna)' };
+        return { price: 1.80, source: 'Francja FR (wartosc orientacyjna)' };
       }
       case 'GB': {
         const res = await fetch('https://www.fuel-prices.eu/live/uk/', { headers: { 'User-Agent': 'Mozilla/5.0' } });
         const html = await res.text();
         const match = html.match(/Diesel[^0-9]*?([1-2]\.[0-9]{2,3})/i);
         if (match) { const price = parseFloat(match[1]); if (price > 1.2 && price < 2.5) return { price, source: 'Srednia UK (fuel-prices.eu)' }; }
-        return { price: 1.84, source: 'Wielka Brytania UK (wartosc orientacyjna)' };
+        return { price: 1.91, source: 'Wielka Brytania UK (wartosc orientacyjna)' };
       }
       case 'NL': {
         const res = await fetch('https://www.fuel-prices.eu/live/netherlands/', { headers: { 'User-Agent': 'Mozilla/5.0' } });
         const html = await res.text();
         const match = html.match(/Diesel[^0-9]*?([1-2]\.[0-9]{2,3})/i);
         if (match) { const price = parseFloat(match[1]); if (price > 1.3 && price < 2.5) return { price, source: 'Srednia NL (fuel-prices.eu)' }; }
-        return { price: 1.72, source: 'Holandia NL (wartosc orientacyjna)' };
+        return { price: 1.85, source: 'Holandia NL (wartosc orientacyjna)' };
       }
       case 'BE': {
         const res = await fetch('https://www.fuel-prices.eu/live/belgium/', { headers: { 'User-Agent': 'Mozilla/5.0' } });
         const html = await res.text();
         const match = html.match(/Diesel[^0-9]*?([1-2]\.[0-9]{2,3})/i);
         if (match) { const price = parseFloat(match[1]); if (price > 1.3 && price < 2.5) return { price, source: 'Srednia BE (fuel-prices.eu)' }; }
-        return { price: 1.68, source: 'Belgia BE (wartosc orientacyjna)' };
+        return { price: 1.80, source: 'Belgia BE (wartosc orientacyjna)' };
       }
       default: return null;
     }
   } catch(e) {
     console.error('getDieselPrice error:', country, e.message);
-    const fallback = { PL: 6.89, DE: 1.65, FR: 2.08, GB: 1.84, NL: 1.72, BE: 1.68 };
+    const fallback = { PL: 8.70, DE: 2.13, FR: 1.80, GB: 1.91, NL: 1.85, BE: 1.80 };
     return fallback[country] ? { price: fallback[country], source: country + ' (wartosc orientacyjna)' } : null;
   }
 }
@@ -139,7 +172,7 @@ router.post('/', upload.array('images', 5), async (req, res, next) => {
 
     let priceInfo = null;
     if (!scanned.price_per_l && !scanned.total && (useTankpool || scanned.has_price === false)) {
-      priceInfo = await getDieselPrice(country);
+      priceInfo = await getStoredPrice(country);
       if (priceInfo) scanned.price_per_l = priceInfo.price;
     }
 
@@ -169,6 +202,49 @@ router.get('/diesel-price/:country', async (req, res, next) => {
 router.get('/rate/:currency', async (req, res, next) => {
   try { const info = await getRate(req.params.currency.toUpperCase()); res.json(info); }
   catch(err) { next(err); }
+});
+
+// Lista cen dziennych (brutto lokalne + PLN po aktualnym kursie NBP)
+router.get('/prices', async (req, res, next) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM fuel_prices ORDER BY country');
+    const out = [];
+    for (const r of rows) {
+      const rate = (await getRate(r.currency)).rate;
+      const g = parseFloat(r.price_gross);
+      out.push({ country: r.country, currency: r.currency, price_gross: g, price_pln: Math.round(g * rate * 100) / 100, rate, source: r.source, manual: r.manual, fetched_at: r.fetched_at });
+    }
+    res.json(out);
+  } catch (err) { next(err); }
+});
+
+// Wymuszone odswiezenie wszystkich krajow (dla crona / przycisku)
+router.post('/prices/refresh', async (req, res, next) => {
+  try {
+    const results = [];
+    for (const c of Object.keys(COUNTRY_CURRENCY)) {
+      try { const info = await refreshCountryPrice(c); results.push({ country: c, ok: !!info, price: info ? info.price : null, source: info ? info.source : null }); }
+      catch (e) { results.push({ country: c, ok: false, error: e.message }); }
+    }
+    res.json({ ok: true, refreshed_at: new Date().toISOString(), results });
+  } catch (err) { next(err); }
+});
+
+// Reczna korekta ceny brutto dla kraju (trzyma sie do nastepnego wymuszonego refreshu)
+router.put('/prices/:country', async (req, res, next) => {
+  try {
+    const country = req.params.country.toUpperCase();
+    const currency = COUNTRY_CURRENCY[country] || 'EUR';
+    const price = parseFloat(req.body.price_gross);
+    if (!price || price <= 0) return res.status(400).json({ error: 'Zla cena' });
+    await pool.query(
+      `INSERT INTO fuel_prices (country, price_gross, currency, source, manual, fetched_at)
+       VALUES ($1,$2,$3,'reczna korekta',true,NOW())
+       ON CONFLICT (country) DO UPDATE SET price_gross=EXCLUDED.price_gross, source='reczna korekta', manual=true, fetched_at=NOW()`,
+      [country, price, currency]
+    );
+    res.json({ ok: true, country, price_gross: price, currency });
+  } catch (err) { next(err); }
 });
 
 module.exports = router;
