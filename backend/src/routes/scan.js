@@ -247,4 +247,99 @@ router.put('/prices/:country', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ===== AUDYT (TYLKO ODCZYT) — ostatnie 2 mies: stan tankowan vs faktury vs szacunek brutto =====
+const STATION_COUNTRY = [
+  [/\bPOL\b|POLSKA|ILOWA|WYKROTY|SLUBICE|GLIWICE|BLONIE|KRZYWA|ORLEN|CITRONEX|A2\b/i, 'PL'],
+  [/\bGBR\b|LYMPNE|CHIPPENHAM|FLAMSTEAD|WOLVERHAMPTON|SKELTON|BURY ST|LEEMING|ALCONBURY|RED LION/i, 'GB'],
+  [/\bFRA\b|FRANCE|CALAIS|ORLEANS|CLERMONT/i, 'FR'],
+  [/\bNL\b|NETHERLAND|WESTFALICA/i, 'NL'],
+  [/\bBE\b|BELGI/i, 'BE'],
+  [/\bDEU\b|\bDE\b|STRAELEN|RHEINE|EMMERICH|ARNSBERG|MARBURG|LEINEFELDE|DOBELN|BRUCHSAL|NORTMOOR|SCHUTTDORF|WESTERKAPPELN|ESCHWEILER|TANKPOOL|TOKHEIM|GILBARCO|TOTALENERGIES/i, 'DE'],
+];
+function guessCountry(s) { if (!s) return '?'; for (const [re, c] of STATION_COUNTRY) if (re.test(s)) return c; return '?'; }
+function esc(x) { return String(x == null ? '' : x).replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m])); }
+function n2(x) { return x == null ? '—' : Number(x).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+router.get('/audit', async (req, res, next) => {
+  try {
+    const since = new Date(); since.setMonth(since.getMonth() - 2); const sinceStr = since.toISOString().slice(0, 10);
+    const { rows: refuels } = await pool.query(
+      `SELECT r.id, r.date, r.liters, r.price_per_l, r.total, r.station, v.plate
+       FROM refuels r JOIN vehicles v ON v.id=r.vehicle_id
+       WHERE r.date >= $1 AND r.fuel_type <> 'ADBLUE'
+       ORDER BY v.plate, r.date`, [sinceStr]);
+    const { rows: inv } = await pool.query(
+      `SELECT ii.plate, i.month AS ym, SUM(ii.gross_amount)::float AS gross, SUM(ii.liters)::float AS liters
+       FROM invoice_items ii JOIN invoices i ON i.id=ii.invoice_id
+       WHERE i.month >= $1 GROUP BY ii.plate, i.month`, [sinceStr.slice(0, 7)]);
+    const invMap = {}; inv.forEach(r => { invMap[(r.plate || '').toUpperCase() + '|' + r.ym] = r; });
+    // dzisiejsze brutto PLN/L per kraj (szacunek)
+    const { rows: fp } = await pool.query('SELECT * FROM fuel_prices');
+    const todayGross = {};
+    for (const p of fp) { const rate = (await getRate(p.currency)).rate; todayGross[p.country] = parseFloat(p.price_gross) * rate; }
+
+    // grupuj po auto|miesiac
+    const groups = {};
+    for (const r of refuels) {
+      const ym = r.date.toISOString().slice(0, 7);
+      const key = r.plate + '|' + ym;
+      const g = groups[key] || (groups[key] = { plate: r.plate, ym, n: 0, L: 0, total: 0, countries: {}, rows: [] });
+      const c = guessCountry(r.station);
+      g.n++; g.L += parseFloat(r.liters) || 0; g.total += parseFloat(r.total) || 0;
+      g.countries[c] = (g.countries[c] || 0) + 1;
+      g.rows.push({ ...r, country: c });
+    }
+
+    let sumCur = 0, sumInv = 0, sumEst = 0;
+    let g1 = '';
+    Object.values(groups).sort((a, b) => a.plate.localeCompare(b.plate) || a.ym.localeCompare(b.ym)).forEach(g => {
+      const dom = Object.keys(g.countries).sort((a, b) => g.countries[b] - g.countries[a])[0];
+      const invRow = invMap[g.plate.toUpperCase() + '|' + g.ym];
+      const invGross = invRow ? invRow.gross : null;
+      const est = todayGross[dom] != null ? g.L * todayGross[dom] : null; // szacunek: litry x dzisiejsze brutto kraju
+      sumCur += g.total; if (invGross != null) sumInv += invGross; if (est != null) sumEst += est;
+      const gap = invGross != null ? invGross - g.total : null;
+      const gapPct = (invGross != null && g.total > 0) ? (gap / g.total * 100) : null;
+      g1 += `<tr>
+        <td><b>${esc(g.plate)}</b></td><td>${esc(g.ym)}</td><td>${esc(dom)}</td>
+        <td style="text-align:right">${g.n}</td>
+        <td style="text-align:right">${n2(g.L)} L</td>
+        <td style="text-align:right">${n2(g.total)}</td>
+        <td style="text-align:right">${g.L > 0 ? n2(g.total / g.L) : '—'}</td>
+        <td style="text-align:right;color:#7fd1cf">${invGross != null ? n2(invGross) : '<span style=color:#666>brak faktury</span>'}</td>
+        <td style="text-align:right;color:#7fd1cf">${invRow ? n2(invRow.gross / invRow.liters) : '—'}</td>
+        <td style="text-align:right;color:#c8a24a">${est != null ? n2(est) : '—'}</td>
+        <td style="text-align:right;font-weight:700;color:${gap != null && gap > 0 ? '#e05a5a' : '#5ad18a'}">${gap != null ? n2(gap) : '—'}${gapPct != null ? ' ('+gapPct.toFixed(0)+'%)' : ''}</td>
+      </tr>`;
+    });
+
+    // detal per tankowanie
+    let g2 = '';
+    refuels.forEach(r => {
+      const c = guessCountry(r.station);
+      const flag = (r.price_per_l && r.price_per_l < 2.6) ? '<span style="color:#e05a5a">obce-surowe?</span>' : (r.price_per_l && r.price_per_l < 5.5 ? '<span style="color:#c8a24a">nisko</span>' : '<span style="color:#5ad18a">PLN?</span>');
+      g2 += `<tr><td>${esc(r.date.toISOString().slice(0,10))}</td><td><b>${esc(r.plate)}</b></td><td>${esc(r.station)||'—'}</td><td>${esc(c)}</td><td style="text-align:right">${n2(r.liters)} L</td><td style="text-align:right">${r.price_per_l != null ? n2(r.price_per_l) : '—'}</td><td style="text-align:right">${n2(r.total)}</td><td>${flag}</td></tr>`;
+    });
+
+    const html = `<!doctype html><meta charset=utf-8><title>Audyt tankowan</title>
+<style>body{background:#0b0e0f;color:#dfe6e6;font-family:-apple-system,system-ui,sans-serif;padding:24px;max-width:1400px;margin:auto}
+h1,h2{font-weight:700}h2{margin-top:32px;font-size:16px;color:#9fb0b0}
+table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
+th,td{padding:6px 8px;border-bottom:1px solid #1c2424;white-space:nowrap}
+th{text-align:left;color:#7f9090;font-size:11px;position:sticky;top:0;background:#0b0e0f}
+tr:hover td{background:#111717}.mono{font-variant-numeric:tabular-nums}
+.note{background:#111717;border:1px solid #1c2424;border-radius:8px;padding:12px 16px;font-size:12px;color:#9fb0b0;margin:12px 0}</style>
+<h1>Audyt tankowan — ostatnie 2 miesiace (od ${sinceStr})</h1>
+<div class="note"><b>Tylko odczyt.</b> Nic nie zmienione w bazie. Kolumny: <b>obecna kwota</b> = co jest teraz w tankowaniach (PLN). <b>Faktura brutto</b> = realny koszt z karty (per auto/mies) — to jest prawda. <b>Szac. brutto</b> = litry × dzisiejsza cena brutto kraju (tylko poglad). <b>Roznica</b> = faktura − obecna (czerwone = zanizone).</div>
+<h2>1. Per auto × miesiac — obecne vs faktury vs szacunek</h2>
+<table class=mono><thead><tr><th>Auto</th><th>Mies</th><th>Kraj*</th><th>Szt</th><th>Litry</th><th>Obecna PLN</th><th>zl/L teraz</th><th>Faktura brutto</th><th>zl/L faktura</th><th>Szac. brutto</th><th>Roznica (faktura−obecna)</th></tr></thead><tbody>${g1}
+<tr style="border-top:2px solid #2a3a3a;font-weight:700"><td colspan=5>SUMA</td><td style="text-align:right">${n2(sumCur)}</td><td></td><td style="text-align:right;color:#7fd1cf">${n2(sumInv)}</td><td></td><td style="text-align:right;color:#c8a24a">${n2(sumEst)}</td><td style="text-align:right;color:#e05a5a">${n2(sumInv - sumCur)}</td></tr>
+</tbody></table>
+<div class="note">*Kraj zgadywany z nazwy stacji — moze byc „?" gdzie nie wykryto. Do audytu, nie do rozliczen.</div>
+<h2>2. Detal per tankowanie (${refuels.length} szt)</h2>
+<table class=mono><thead><tr><th>Data</th><th>Auto</th><th>Stacja</th><th>Kraj*</th><th>Litry</th><th>zl/L teraz</th><th>Kwota teraz</th><th>Stan</th></tr></thead><tbody>${g2}</tbody></table>`;
+    res.set('Content-Type', 'text/html; charset=utf-8').send(html);
+  } catch (err) { next(err); }
+});
+
 module.exports = router;
