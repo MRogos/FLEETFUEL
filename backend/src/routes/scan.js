@@ -264,7 +264,7 @@ router.get('/audit', async (req, res, next) => {
   try {
     const since = new Date(); since.setMonth(since.getMonth() - 2); const sinceStr = since.toISOString().slice(0, 10);
     const { rows: refuels } = await pool.query(
-      `SELECT r.id, r.date, r.liters, r.price_per_l, r.total, r.station, v.plate
+      `SELECT r.id, r.date, r.liters, r.price_per_l, r.total, r.station, r.country, v.plate
        FROM refuels r JOIN vehicles v ON v.id=r.vehicle_id
        WHERE r.date >= $1 AND r.fuel_type <> 'ADBLUE'
        ORDER BY v.plate, r.date`, [sinceStr]);
@@ -318,7 +318,8 @@ router.get('/audit', async (req, res, next) => {
     refuels.forEach(r => {
       const c = guessCountry(r.station);
       const flag = (r.price_per_l && r.price_per_l < 2.6) ? '<span style="color:#e05a5a">obce-surowe?</span>' : (r.price_per_l && r.price_per_l < 5.5 ? '<span style="color:#c8a24a">nisko</span>' : '<span style="color:#5ad18a">PLN?</span>');
-      g2 += `<tr><td>${esc(r.date.toISOString().slice(0,10))}</td><td><b>${esc(r.plate)}</b></td><td>${esc(r.station)||'—'}</td><td>${esc(c)}</td><td style="text-align:right">${n2(r.liters)} L</td><td style="text-align:right">${r.price_per_l != null ? n2(r.price_per_l) : '—'}</td><td style="text-align:right">${n2(r.total)}</td><td>${flag}</td></tr>`;
+      const curC = r.country || c || ''; const csel = '<select onchange="setC('+r.id+',this.value,this)" style="background:#1c2424;color:#dfe6e6;border:1px solid #2a3a3a;border-radius:4px;padding:2px 4px;font-size:11px">'+['','PL','DE','GB','NL','BE','FR'].map(function(o){return '<option value="'+o+'"'+(o===curC?' selected':'')+'>'+(o||'?')+'</option>';}).join('')+'</select>';
+      g2 += `<tr><td>${esc(r.date.toISOString().slice(0,10))}</td><td><b>${esc(r.plate)}</b></td><td>${esc(r.station)||'—'}</td><td>${csel}</td><td style="text-align:right">${n2(r.liters)} L</td><td style="text-align:right">${r.price_per_l != null ? n2(r.price_per_l) : '—'}</td><td style="text-align:right">${n2(r.total)}</td><td>${flag}</td></tr>`;
     });
 
     // === ANALIZA WG WIELKOSCI (metoda Marcina: duze=PL, male=zagranica) ===
@@ -361,7 +362,8 @@ tr:hover td{background:#111717}.mono{font-variant-numeric:tabular-nums}
 </tbody></table>
 <div class="note">*Kraj zgadywany z nazwy stacji — moze byc „?" gdzie nie wykryto. Do audytu, nie do rozliczen.</div>
 <h2>2. Detal per tankowanie (${refuels.length} szt)</h2>
-<table class=mono><thead><tr><th>Data</th><th>Auto</th><th>Stacja</th><th>Kraj*</th><th>Litry</th><th>zl/L teraz</th><th>Kwota teraz</th><th>Stan</th></tr></thead><tbody>${g2}</tbody></table>`;
+<table class=mono><thead><tr><th>Data</th><th>Auto</th><th>Stacja</th><th>Kraj*</th><th>Litry</th><th>zl/L teraz</th><th>Kwota teraz</th><th>Stan</th></tr></thead><tbody>${g2}</tbody></table>
+<script>function setC(id,val,el){el.style.borderColor='#c8a24a';fetch('/api/refuels/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({country:val||null})}).then(function(r){el.style.borderColor=r.ok?'#5ad18a':'#e05a5a';}).catch(function(){el.style.borderColor='#e05a5a';});}</script>`;
     res.set('Content-Type', 'text/html; charset=utf-8').send(html);
   } catch (err) { next(err); }
 });
