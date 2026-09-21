@@ -309,6 +309,17 @@
       <label for="r-is-full" style="font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;letter-spacing:0;text-transform:none">Pełne tankowanie (do pełna)</label>
     </div>
     <div class="form-row"><label>Stacja paliw</label><input type="text" id="r-station" placeholder="np. Orlen, Shell, Tankpool..."></div>
+    <div class="form-row"><label>Kraj tankowania</label>
+      <select id="r-country">
+        <option value="">(nie podano)</option>
+        <option value="PL">PL - Polska</option>
+        <option value="DE">DE - Niemcy</option>
+        <option value="GB">GB - Wielka Brytania</option>
+        <option value="NL">NL - Holandia</option>
+        <option value="BE">BE - Belgia</option>
+        <option value="FR">FR - Francja</option>
+      </select>
+    </div>
     <div class="form-row"><label>Uwagi</label><input type="text" id="r-notes" placeholder="opcjonalnie"></div>
     <div class="modal-actions">
       <button class="btn-ghost" id="btn-cancel-refuel">Anuluj</button>

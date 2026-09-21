@@ -574,6 +574,7 @@ async function openRefuelModal(id=null) {
   $('refuel-edit-id').value=''; $('modal-refuel-title').textContent='Dodaj tankowanie';
   $('r-date').value=new Date().toISOString().slice(0,10);
   $('r-vehicle').value=''; $('r-fuel').value='ON'; $('r-driver').value=''; $('r-is-full').checked=true;
+  if($('r-country')) $('r-country').value='';
   ['r-liters','r-price','r-total','r-mileage','r-station','r-notes'].forEach(f=>$(f).value='');
   if(id){
     try{
@@ -585,6 +586,7 @@ async function openRefuelModal(id=null) {
       $('r-mileage').value=r.mileage||''; $('r-driver').value=r.driver_id||'';
       $('r-is-full').checked=r.is_full!==false;
       $('r-station').value=r.station||''; $('r-notes').value=r.notes||'';
+      if($('r-country')) $('r-country').value=r.country||'';
     }catch(e){showToast('❌ Błąd');return;}
   }
   $('modal-refuel').classList.add('open');
@@ -597,7 +599,7 @@ async function saveRefuel() {
   const is_full=$('r-is-full').checked;
   const price_per_l=parseFloat($('r-price').value)||null, total=parseFloat($('r-total').value)||null;
   const mileage=parseInt($('r-mileage').value)||null, editId=$('refuel-edit-id').value;
-  const body={vehicle_id,date,liters,fuel_type:$('r-fuel').value,price_per_l,total,mileage,driver_id,is_full,station:$('r-station').value.trim()||null,notes:$('r-notes').value.trim()||null};
+  const body={vehicle_id,date,liters,fuel_type:$('r-fuel').value,price_per_l,total,mileage,driver_id,is_full,station:$('r-station').value.trim()||null,notes:$('r-notes').value.trim()||null,country:($('r-country')?$('r-country').value:'')||null};
   try{
     if(editId){await api('PUT',`/refuels/${editId}`,body);showToast('✅ Tankowanie zaktualizowane');}
     else{await api('POST','/refuels',body);showToast('✅ Tankowanie zapisane');}
@@ -772,7 +774,7 @@ $('btn-scan-save').addEventListener('click',async()=>{
   const liters=parseFloat($('sr-liters').value);
   if(!liters||liters<=0){showToast('Podaj prawidłową ilość litrów!');return;}
   const scanDate=$('sr-date')?$('sr-date').value:new Date().toISOString().slice(0,10);
-  const body={vehicle_id:vehicleId,date:scanDate||new Date().toISOString().slice(0,10),liters,fuel_type:$('sr-fuel').value||'ON'};
+  const body={vehicle_id:vehicleId,date:scanDate||new Date().toISOString().slice(0,10),liters,fuel_type:$('sr-fuel').value||'ON',country:($('scan-country')?$('scan-country').value:'')||null};
   const price=parseFloat($('sr-price').value), total=parseFloat($('sr-total').value), mileage=parseInt($('sr-mileage').value), station=$('sr-station').value.trim();
   const driverId=parseInt($('scan-driver')?$('scan-driver').value:'');
   if(price>0) body.price_per_l=price; if(total>0) body.total=total; if(mileage>0) body.mileage=mileage;

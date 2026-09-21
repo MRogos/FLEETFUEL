@@ -142,6 +142,11 @@ async function initDB() {
       ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS discount_amount NUMERIC(10,2);
     `);
 
+    // Kraj tankowania - zapisywany od teraz
+    await client.query(`
+      ALTER TABLE refuels ADD COLUMN IF NOT EXISTS country VARCHAR(2);
+    `);
+
     // Krok 6c: ceny paliw dzienne (brutto detaliczne per kraj) + seed aktualnym brutto (wrzesien 2026)
     await client.query(`
       CREATE TABLE IF NOT EXISTS fuel_prices (
