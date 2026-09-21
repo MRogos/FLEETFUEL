@@ -321,6 +321,25 @@ router.get('/audit', async (req, res, next) => {
       g2 += `<tr><td>${esc(r.date.toISOString().slice(0,10))}</td><td><b>${esc(r.plate)}</b></td><td>${esc(r.station)||'—'}</td><td>${esc(c)}</td><td style="text-align:right">${n2(r.liters)} L</td><td style="text-align:right">${r.price_per_l != null ? n2(r.price_per_l) : '—'}</td><td style="text-align:right">${n2(r.total)}</td><td>${flag}</td></tr>`;
     });
 
+    // === ANALIZA WG WIELKOSCI (metoda Marcina: duze=PL, male=zagranica) ===
+    const maxByVeh = {};
+    refuels.forEach(r => { const L = parseFloat(r.liters) || 0; if (L > (maxByVeh[r.plate] || 0)) maxByVeh[r.plate] = L; });
+    const plG = todayGross['PL'] || 8.9, forG = todayGross['DE'] || 9.2;
+    const vehAgg = {};
+    refuels.forEach(r => {
+      const L = parseFloat(r.liters) || 0, cur = parseFloat(r.total) || 0;
+      const thr = 0.55 * (maxByVeh[r.plate] || L);
+      const isPL = L >= thr;
+      const a = vehAgg[r.plate] || (vehAgg[r.plate] = { plate: r.plate, thr, plN: 0, plL: 0, plCur: 0, plEst: 0, foN: 0, foL: 0, foCur: 0, foEst: 0 });
+      const est = L * (isPL ? plG : forG);
+      if (isPL) { a.plN++; a.plL += L; a.plCur += cur; a.plEst += est; } else { a.foN++; a.foL += L; a.foCur += cur; a.foEst += est; }
+    });
+    let tCur = 0, tEst = 0;
+    const s3 = Object.values(vehAgg).sort((a, b) => a.plate.localeCompare(b.plate)).map(a => {
+      const cur = a.plCur + a.foCur, est = a.plEst + a.foEst; tCur += cur; tEst += est;
+      return `<tr><td><b>${esc(a.plate)}</b></td><td style="text-align:right">${n2(a.thr)} L</td><td style="text-align:right">${a.plN} / ${n2(a.plL)} L</td><td style="text-align:right">${n2(a.plCur)}</td><td style="text-align:right;color:#c8a24a">${a.foN} / ${n2(a.foL)} L</td><td style="text-align:right">${n2(a.foCur)}</td><td style="text-align:right">${n2(cur)}</td><td style="text-align:right;color:#7fd1cf">${n2(est)}</td><td style="text-align:right;font-weight:700;color:${est - cur > 0 ? '#e05a5a' : '#5ad18a'}">${n2(est - cur)}</td></tr>`;
+    }).join('');
+
     const html = `<!doctype html><meta charset=utf-8><title>Audyt tankowan</title>
 <style>body{background:#0b0e0f;color:#dfe6e6;font-family:-apple-system,system-ui,sans-serif;padding:24px;max-width:1400px;margin:auto}
 h1,h2{font-weight:700}h2{margin-top:32px;font-size:16px;color:#9fb0b0}
@@ -331,6 +350,11 @@ tr:hover td{background:#111717}.mono{font-variant-numeric:tabular-nums}
 .note{background:#111717;border:1px solid #1c2424;border-radius:8px;padding:12px 16px;font-size:12px;color:#9fb0b0;margin:12px 0}</style>
 <h1>Audyt tankowan — ostatnie 2 miesiace (od ${sinceStr})</h1>
 <div class="note"><b>Tylko odczyt.</b> Nic nie zmienione w bazie. Kolumny: <b>obecna kwota</b> = co jest teraz w tankowaniach (PLN). <b>Faktura brutto</b> = realny koszt z karty (per auto/mies) — to jest prawda. <b>Szac. brutto</b> = litry × dzisiejsza cena brutto kraju (tylko poglad). <b>Roznica</b> = faktura − obecna (czerwone = zanizone).</div>
+<h2>ANALIZA WG WIELKOSCI (Twoja metoda: duze=PL, male=zagranica)</h2>
+<div class="note">Dla kazdego auta prog = 55% najwiekszego tankowania. Powyzej = PL (pelny bak), ponizej = dolewka zagraniczna (DE/GB). "Szac. poprawna" = litry x brutto (PL ${n2(plG)} zl/L, zagr ${n2(forG)} zl/L). Patrz na SUMA na dole tej tabeli - to ile realnie brakuje.</div>
+<table class=mono><thead><tr><th>Auto</th><th>Prog</th><th>PL: szt/litry</th><th>PL obecna</th><th>Zagr: szt/litry</th><th>Zagr obecna</th><th>Razem obecna</th><th>Szac. poprawna</th><th>Roznica</th></tr></thead><tbody>${s3}
+<tr style="border-top:2px solid #2a3a3a;font-weight:700"><td colspan=6>SUMA</td><td style="text-align:right">${n2(tCur)}</td><td style="text-align:right;color:#7fd1cf">${n2(tEst)}</td><td style="text-align:right;color:#e05a5a">${n2(tEst - tCur)}</td></tr>
+</tbody></table>
 <h2>1. Per auto × miesiac — obecne vs faktury vs szacunek</h2>
 <table class=mono><thead><tr><th>Auto</th><th>Mies</th><th>Kraj*</th><th>Szt</th><th>Litry</th><th>Obecna PLN</th><th>zl/L teraz</th><th>Faktura brutto</th><th>zl/L faktura</th><th>Szac. brutto</th><th>Roznica (faktura−obecna)</th></tr></thead><tbody>${g1}
 <tr style="border-top:2px solid #2a3a3a;font-weight:700"><td colspan=5>SUMA</td><td style="text-align:right">${n2(sumCur)}</td><td></td><td style="text-align:right;color:#7fd1cf">${n2(sumInv)}</td><td></td><td style="text-align:right;color:#c8a24a">${n2(sumEst)}</td><td style="text-align:right;color:#e05a5a">${n2(sumInv - sumCur)}</td></tr>
