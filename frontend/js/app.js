@@ -220,6 +220,7 @@ async function loadFuelPrices(){
   const tbody=$('fuel-prices-table'); if(!tbody) return;
   try{
     const prices=await api('GET','/scan/prices');
+    { const rem=$('fuel-prices-reminder'); if(rem){ const st=prices.filter(p=>(Date.now()-new Date(p.fetched_at).getTime())/3600000>=20); rem.innerHTML=st.length?'<div style="background:rgba(230,169,53,0.12);border:1px solid #e6a935;color:#e6a935;border-radius:8px;padding:8px 12px;font-size:12px">&#9888; Ceny nieodswiezone dzis ('+st.map(p=>p.country).join(', ')+'). Kliknij Odswiez teraz aby pobrac aktualne.</div>':''; } }
     tbody.innerHTML=prices.map(p=>{
       const d=new Date(p.fetched_at), ageH=(Date.now()-d.getTime())/3600000;
       const when=ageH<20?'dzis':d.toLocaleDateString('pl-PL');
