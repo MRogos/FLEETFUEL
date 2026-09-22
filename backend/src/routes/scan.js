@@ -432,7 +432,7 @@ Razem w bazie: <b>${refuels.length}</b> | Dostaly kraj: <b>${refuels.length - no
 // === PRZELICZANIE KWOT: wycena Kowalskiego (PL dzienny hurt Orlen+VAT, DE/GB miesiecznie) ===
 let PL_DAILY = {};
 try { PL_DAILY = require('../data/pl_daily.json'); } catch(e) { console.error('pl_daily.json brak:', e.message); }
-const FX_MONTHLY = { DE: { 7: 2.05, 8: 2.15 }, GB: { 7: 1.42, 8: 1.44 } };
+const FX_MONTHLY = { DE: { 7: 2.08, 8: 2.18 }, GB: { 7: 1.72, 8: 1.80 } };
 function plPriceOn(ds) { if (PL_DAILY[ds]) return PL_DAILY[ds]; const ks = Object.keys(PL_DAILY).sort(); let v = null; for (const k of ks) { if (k <= ds) v = PL_DAILY[k]; else break; } return v; }
 async function nbpRange(cur) { try { const res = await fetch(`https://api.nbp.pl/api/exchangerates/rates/a/${cur.toLowerCase()}/2026-06-25/2026-09-05/?format=json`); if (!res.ok) throw new Error('nbp'); const data = await res.json(); const m = {}; data.rates.forEach(r => m[r.effectiveDate] = parseFloat(r.mid)); return m; } catch (e) { return {}; } }
 function rateOn(map, ds, fb) { if (map[ds]) return map[ds]; const ks = Object.keys(map).sort(); let v = null; for (const k of ks) { if (k <= ds) v = map[k]; else break; } return v || fb; }
