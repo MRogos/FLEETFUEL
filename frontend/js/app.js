@@ -25,6 +25,7 @@ function fuelBadge(type) {
   return `<span class="badge badge-fuel"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${colors[type]||'#666'};margin-right:4px"></span>${type==='ADBLUE'?'AdBlue':type}</span>`;
 }
 
+function countryBadge(c){ if(!c) return '<span style="color:var(--text3)">-</span>'; var col={PL:'#e74c3c',DE:'#f1c40f',GB:'#3498db',FR:'#2ecc71'}[c]||'#8a97a0'; return '<span class="badge" style="background:'+col+'22;color:'+col+';font-weight:700;font-size:11px">'+c+'</span>'; }
 function consBadge(val) {
   if(val==null) return '—';
   const v=parseFloat(val);
@@ -51,7 +52,7 @@ function sortRefuels(col) {
   if(_refuelsCache.length) {
     renderRefuels(_refuelsCache);
   } else {
-    loadRefuelsData();
+    loadRefuels();
   }
 }
 
@@ -85,6 +86,7 @@ function renderRefuels(refuels) {
       <td><div class="vehicle-name" style="font-size:13px;font-weight:700">${r.vehicle_plate}</div><div class="vehicle-plate" style="font-size:11px;color:var(--text3)">${r.vehicle_name}</div></td>
       <td style="font-size:12px;color:var(--text2)">${r.driver_name||'—'}</td>
       <td>${fuelBadge(r.fuel_type)} ${r.is_full===false?'<span class="badge" style="background:rgba(231,76,60,0.15);color:#e74c3c;font-size:9px">NIEPEŁNE</span>':''}</td>
+      <td>${countryBadge(r.country)}</td>
       <td class="mono">${fmtNum(r.liters,2)} L</td>
       <td class="mono">${r.price_per_l?fmtNum(r.price_per_l,3)+' zł':'—'}</td>
       <td class="mono" style="color:var(--accent)">${r.total?fmtNum(r.total,2)+' zł':'—'}</td>
@@ -302,10 +304,10 @@ async function loadRefuels() {
   if(ff) params.set('fuel_type',ff);
   if(fm) params.set('month',fm);
   const tbody=$('refuels-table');
-  tbody.innerHTML='<tr><td colspan="12"><div class="loading">Ładowanie...</div></td></tr>';
+  tbody.innerHTML='<tr><td colspan="13"><div class="loading">Ładowanie...</div></td></tr>';
   try {
     const refuels=await api('GET',`/refuels?${params}`);
-    if(!refuels.length){tbody.innerHTML='<tr><td colspan="12"><div class="empty"><div class="empty-icon">⛽</div><div>Brak wyników</div></div></td></tr>';return;}
+    if(!refuels.length){tbody.innerHTML='<tr><td colspan="13"><div class="empty"><div class="empty-icon">⛽</div><div>Brak wyników</div></div></td></tr>';return;}
     const byVehicle={};
     refuels.forEach(r=>{if(r.fuel_type==='ADBLUE')return;(byVehicle[r.vehicle_id]=byVehicle[r.vehicle_id]||[]).push(r);});
     _consMap={}; _distMap={};
@@ -324,7 +326,7 @@ async function loadRefuels() {
     });
     _refuelsCache=[...refuels];
     renderRefuels(refuels);
-  } catch(err){tbody.innerHTML='<tr><td colspan="12"><div class="empty">Błąd</div></td></tr>';}
+  } catch(err){tbody.innerHTML='<tr><td colspan="13"><div class="empty">Błąd</div></td></tr>';}
 }
 
 /* ─── REPORTS ─── */
@@ -605,7 +607,7 @@ async function saveRefuel() {
     else{await api('POST','/refuels',body);showToast('✅ Tankowanie zapisane');}
     $('modal-refuel').classList.remove('open');
     // Tylko odswierz dane - nie przeladowuj selectow
-    loadRefuelsData();
+    loadRefuels();
   }catch(err){showToast('❌ '+err.message);}
 }
 
@@ -619,7 +621,7 @@ async function loadRefuelsData() {
   const tbody=$('refuels-table');
   try {
     const refuels=await api('GET',`/refuels?${params}`);
-    if(!refuels.length){tbody.innerHTML='<tr><td colspan="12"><div class="empty"><div class="empty-icon">⛽</div><div>Brak wyników</div></div></td></tr>';return;}
+    if(!refuels.length){tbody.innerHTML='<tr><td colspan="13"><div class="empty"><div class="empty-icon">⛽</div><div>Brak wyników</div></div></td></tr>';return;}
     const byVehicle={};
     refuels.forEach(r=>{if(r.fuel_type==='ADBLUE')return;(byVehicle[r.vehicle_id]=byVehicle[r.vehicle_id]||[]).push(r);});
     _consMap={}; _distMap={};
@@ -667,12 +669,12 @@ async function loadRefuelsData() {
         </td>
       </tr>`;
     }).join('');
-  } catch(err){tbody.innerHTML='<tr><td colspan="12"><div class="empty">Błąd</div></td></tr>';}
+  } catch(err){tbody.innerHTML='<tr><td colspan="13"><div class="empty">Błąd</div></td></tr>';}
 }
 
 async function deleteRefuel(id) {
   if(!confirm('Usunąć to tankowanie?')) return;
-  try{await api('DELETE',`/refuels/${id}`);showToast('🗑️ Tankowanie usunięte');loadRefuelsData();}
+  try{await api('DELETE',`/refuels/${id}`);showToast('🗑️ Tankowanie usunięte');loadRefuels();}
   catch(e){showToast('❌ Błąd');}
 }
 
@@ -781,7 +783,7 @@ $('btn-scan-save').addEventListener('click',async()=>{
   if(station) body.station=station; if(driverId>0) body.driver_id=driverId;
   body.is_full=$('scan-is-full')?$('scan-is-full').checked:true;
   body.notes='Dodano przez skan zdjęć';
-  try{await api('POST','/refuels',body);showToast('✅ Tankowanie zapisane');$('modal-scan').classList.remove('open');loadRefuelsData();}
+  try{await api('POST','/refuels',body);showToast('✅ Tankowanie zapisane');$('modal-scan').classList.remove('open');loadRefuels();}
   catch(e){showToast('❌ '+e.message);}
 });
 
