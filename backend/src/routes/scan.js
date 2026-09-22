@@ -368,4 +368,40 @@ tr:hover td{background:#111717}.mono{font-variant-numeric:tabular-nums}
   } catch (err) { next(err); }
 });
 
+// === DOPASOWANIE AS24: przypisz kraj do tankowan po aucie+litrach+dacie (dry-run; ?apply=1 zapisuje) ===
+let AS24 = [];
+try { AS24 = require('../data/as24.json'); } catch(e) { console.error('as24.json brak:', e.message); }
+function daysDiff(a, b) { return Math.abs((new Date(a).getTime() - new Date(b).getTime()) / 86400000); }
+router.get('/match-as24', async (req, res, next) => {
+  try {
+    const apply = req.query.apply === '1';
+    if (!AS24.length) return res.send('<p style="color:red">Brak danych AS24</p>');
+    const plates = [...new Set(AS24.map(t => t.plate))];
+    const { rows: refuels } = await pool.query(
+      `SELECT r.id, v.plate, TO_CHAR(r.date,'YYYY-MM-DD') AS d, r.liters::float AS liters, r.country
+       FROM refuels r JOIN vehicles v ON v.id=r.vehicle_id
+       WHERE v.plate = ANY($1) AND r.date >= '2026-06-25' AND r.date <= '2026-09-05'`, [plates]);
+    const byPlate = {};
+    refuels.forEach(r => { (byPlate[r.plate] = byPlate[r.plate] || []).push(r); });
+    const used = new Set(); const matched = []; const unmatched = [];
+    for (const t of AS24) {
+      const cands = (byPlate[t.plate] || []).filter(r => !used.has(r.id) && Math.abs(r.liters - t.liters) <= 0.6);
+      cands.sort((a, b) => daysDiff(a.d, t.date) - daysDiff(b.d, t.date) || Math.abs(a.liters - t.liters) - Math.abs(b.liters - t.liters));
+      const best = cands.find(r => daysDiff(r.d, t.date) <= 4);
+      if (best) { used.add(best.id); matched.push({ t, r: best }); } else unmatched.push(t);
+    }
+    if (apply) { for (const m of matched) await pool.query('UPDATE refuels SET country=$1 WHERE id=$2', [m.t.country, m.r.id]); }
+    const perC = {}; matched.forEach(m => perC[m.t.country] = (perC[m.t.country] || 0) + 1);
+    const rowsHtml = matched.map(m => `<tr><td>${m.r.plate}</td><td>${m.t.date}</td><td style="text-align:right">${m.t.liters} L</td><td><b>${m.t.country}</b></td><td style="color:#888">#${m.r.id} (${m.r.d}, ${m.r.liters}L)</td></tr>`).join('');
+    const unHtml = unmatched.map(t => `<tr><td>${t.plate}</td><td>${t.date}</td><td style="text-align:right">${t.liters} L</td><td>${t.country}</td></tr>`).join('');
+    res.set('Content-Type','text/html; charset=utf-8').send(`<!doctype html><meta charset=utf-8><style>body{background:#0b0e0f;color:#dfe6e6;font-family:system-ui;padding:24px}table{border-collapse:collapse;font-size:12px;width:100%}td,th{padding:4px 8px;border-bottom:1px solid #1c2424;text-align:left}h1,h2{font-weight:700}.b{background:#111717;border:1px solid #1c2424;border-radius:8px;padding:12px 16px;margin:12px 0}</style>
+<h1>Dopasowanie AS24 -> kraj tankowan</h1>
+<div class="b">${apply ? '<b style="color:#5ad18a">ZAPISANO do bazy.</b>' : '<b>PODGLAD (dry-run) - nic nie zapisano.</b> Zeby zapisac: dodaj <b>?apply=1</b> na koncu adresu.'}<br>
+AS24 transakcji: <b>${AS24.length}</b> | Dopasowano: <b>${matched.length}</b> (${Object.entries(perC).map(([c,n])=>c+':'+n).join(', ')||'-'}) | Bez dopasowania: <b>${unmatched.length}</b></div>
+<h2>Dopasowane (${matched.length})</h2><table><thead><tr><th>Auto</th><th>Data AS24</th><th>Litry</th><th>Kraj</th><th>Tankowanie w bazie</th></tr></thead><tbody>${rowsHtml}</tbody></table>
+<h2>Bez dopasowania (${unmatched.length})</h2><table><thead><tr><th>Auto</th><th>Data</th><th>Litry</th><th>Kraj</th></tr></thead><tbody>${unHtml}</tbody></table>`);
+  } catch (err) { next(err); }
+});
+
 module.exports = router;
+
