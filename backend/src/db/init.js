@@ -145,6 +145,8 @@ async function initDB() {
     // Kraj tankowania - zapisywany od teraz
     await client.query(`
       ALTER TABLE refuels ADD COLUMN IF NOT EXISTS country VARCHAR(2);
+      ALTER TABLE refuels ADD COLUMN IF NOT EXISTS total_orig NUMERIC(10,2);
+      ALTER TABLE refuels ADD COLUMN IF NOT EXISTS price_orig NUMERIC(8,4);
     `);
 
     // Krok 6c: ceny paliw dzienne (brutto detaliczne per kraj) + seed aktualnym brutto (wrzesien 2026)

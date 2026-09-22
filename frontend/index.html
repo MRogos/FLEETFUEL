@@ -30,6 +30,7 @@
     <button class="btn-ghost" id="btn-audit" style="font-size:12px" onclick="window.open('/api/scan/audit?t='+Date.now(),'_blank')">&#128203; Audyt</button>
     <button class="btn-ghost" id="btn-as24" style="font-size:12px" onclick="window.open('/api/scan/match-as24?t='+Date.now(),'_blank')">&#128205; AS24 kraje</button>
     <button class="btn-ghost" id="btn-as24save" style="font-size:12px;color:#5ad18a" onclick="if(confirm('Zapisac kraje z AS24 do bazy?'))window.open('/api/scan/match-as24?apply=1&t='+Date.now(),'_blank')">&#128190; AS24 zapisz</button>
+    <button class="btn-ghost" id="btn-reprice" style="font-size:12px" onclick="window.open('/api/scan/reprice?t='+Date.now(),'_blank')">&#128176; Przelicz kwoty</button>
     <button class="btn" id="btn-add-refuel">+ Tankowanie</button>
     <button class="btn-ghost" id="btn-logout" style="font-size:11px;padding:6px 12px">Wyloguj</button>
   </div>
