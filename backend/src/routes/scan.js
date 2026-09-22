@@ -392,17 +392,30 @@ router.get('/match-as24', async (req, res, next) => {
       if (loose) { used.add(loose.id); looseM.push({ t, r: loose }); continue; }
       unmatched.push(t);
     }
-    if (apply) { for (const m of matched.concat(looseM)) await pool.query('UPDATE refuels SET country=$1 WHERE id=$2', [m.t.country, m.r.id]); }
-    const perC = {}; matched.concat(looseM).forEach(m => perC[m.t.country] = (perC[m.t.country] || 0) + 1);
+    const summed = []; const stillUn = []; const grp = {};
+    unmatched.forEach(t => { const k = t.plate + '|' + t.date + '|' + t.country; (grp[k] = grp[k] || []).push(t); });
+    for (const k of Object.keys(grp)) {
+      const g = grp[k];
+      if (g.length < 2) { stillUn.push(...g); continue; }
+      const sumL = Math.round(g.reduce((a, t) => a + t.liters, 0) * 100) / 100;
+      const cand = (byPlate[g[0].plate] || []).filter(r => !used.has(r.id) && Math.abs(r.liters - sumL) <= 1 && daysDiff(r.d, g[0].date) <= 10).sort((a, b) => daysDiff(a.d, g[0].date) - daysDiff(b.d, g[0].date))[0];
+      if (cand) { used.add(cand.id); summed.push({ t: { plate: g[0].plate, date: g[0].date, country: g[0].country, liters: sumL, parts: g.length }, r: cand }); }
+      else stillUn.push(...g);
+    }
+    unmatched.length = 0; unmatched.push(...stillUn);
+    if (apply) { for (const m of matched.concat(looseM).concat(summed)) await pool.query('UPDATE refuels SET country=$1 WHERE id=$2', [m.t.country, m.r.id]); }
+    const perC = {}; matched.concat(looseM).concat(summed).forEach(m => perC[m.t.country] = (perC[m.t.country] || 0) + 1);
     const rowsHtml = matched.map(m => `<tr><td>${m.r.plate}</td><td>${m.t.date}</td><td style="text-align:right">${m.t.liters} L</td><td><b>${m.t.country}</b></td><td style="color:#888">#${m.r.id} (${m.r.d}, ${m.r.liters}L)</td></tr>`).join('');
     const looseHtml = looseM.map(m => `<tr><td>${m.r.plate}</td><td>${m.t.date}</td><td style="text-align:right">${m.t.liters} L</td><td><b>${m.t.country}</b></td><td style="color:#c8a24a">#${m.r.id} (${m.r.d}, ${m.r.liters}L) - litry sie roznia, sprawdz</td></tr>`).join('');
+    const summedHtml = summed.map(m => `<tr><td>${m.r.plate}</td><td>${m.t.date}</td><td style="text-align:right">${m.t.liters} L (${m.t.parts} czesci)</td><td><b>${m.t.country}</b></td><td style="color:#888">#${m.r.id} (${m.r.d}, ${m.r.liters}L)</td></tr>`).join('');
     const unHtml = unmatched.map(t => `<tr><td>${t.plate}</td><td>${t.date}</td><td style="text-align:right">${t.liters} L</td><td>${t.country}</td></tr>`).join('');
     res.set('Content-Type','text/html; charset=utf-8').send(`<!doctype html><meta charset=utf-8><style>body{background:#0b0e0f;color:#dfe6e6;font-family:system-ui;padding:24px}table{border-collapse:collapse;font-size:12px;width:100%}td,th{padding:4px 8px;border-bottom:1px solid #1c2424;text-align:left}h1,h2{font-weight:700}.b{background:#111717;border:1px solid #1c2424;border-radius:8px;padding:12px 16px;margin:12px 0}</style>
 <h1>Dopasowanie AS24 -> kraj tankowan</h1>
 <div class="b">${apply ? '<b style="color:#5ad18a">ZAPISANO do bazy.</b>' : '<b>PODGLAD (dry-run) - nic nie zapisano.</b> Zeby zapisac: dodaj <b>?apply=1</b> na koncu adresu.'}<br>
-AS24 transakcji: <b>${AS24.length}</b> | Pewne: <b>${matched.length}</b> | Luzne: <b>${looseM.length}</b> | Razem: <b>${matched.length+looseM.length}</b> (${Object.entries(perC).map(([c,n])=>c+':'+n).join(', ')||'-'}) | Bez: <b>${unmatched.length}</b></div>
+AS24 transakcji: <b>${AS24.length}</b> | Pewne: <b>${matched.length}</b> | Luzne: <b>${looseM.length}</b> | Zsumowane: <b>${summed.length}</b> | Razem: <b>${matched.length+looseM.length+summed.length}</b> (${Object.entries(perC).map(([c,n])=>c+':'+n).join(', ')||'-'}) | Bez: <b>${unmatched.length}</b></div>
 <h2>Dopasowane pewne (${matched.length})</h2><table><thead><tr><th>Auto</th><th>Data AS24</th><th>Litry</th><th>Kraj</th><th>Tankowanie w bazie</th></tr></thead><tbody>${rowsHtml}</tbody></table>
 <h2>Dopasowane luzniej - SPRAWDZ czy OK (${looseM.length})</h2><table><thead><tr><th>Auto</th><th>Data AS24</th><th>Litry AS24</th><th>Kraj</th><th>Tankowanie w bazie</th></tr></thead><tbody>${looseHtml}</tbody></table>
+<h2>Zsumowane (AS24 rozbil, program scalil) (${summed.length})</h2><table><thead><tr><th>Auto</th><th>Data AS24</th><th>Litry (suma)</th><th>Kraj</th><th>Tankowanie w bazie</th></tr></thead><tbody>${summedHtml}</tbody></table>
 <h2>Bez dopasowania (${unmatched.length})</h2><table><thead><tr><th>Auto</th><th>Data</th><th>Litry</th><th>Kraj</th></tr></thead><tbody>${unHtml}</tbody></table>`);
   } catch (err) { next(err); }
 });
