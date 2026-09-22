@@ -371,6 +371,7 @@ tr:hover td{background:#111717}.mono{font-variant-numeric:tabular-nums}
 // === DOPASOWANIE AS24: przypisz kraj do tankowan po aucie+litrach+dacie (dry-run; ?apply=1 zapisuje) ===
 let AS24 = [];
 try { AS24 = require('../data/as24.json'); } catch(e) { console.error('as24.json brak:', e.message); }
+try { AS24 = AS24.concat(require('../data/tankpool.json')); } catch(e) { console.error('tankpool.json brak:', e.message); }
 function daysDiff(a, b) { return Math.abs((new Date(a).getTime() - new Date(b).getTime()) / 86400000); }
 router.get('/match-as24', async (req, res, next) => {
   try {
@@ -380,7 +381,7 @@ router.get('/match-as24', async (req, res, next) => {
     const { rows: refuels } = await pool.query(
       `SELECT r.id, v.plate, TO_CHAR(r.date,'YYYY-MM-DD') AS d, r.liters::float AS liters, r.country
        FROM refuels r JOIN vehicles v ON v.id=r.vehicle_id
-       WHERE v.plate = ANY($1) AND r.date >= '2026-06-25' AND r.date <= '2026-09-05'`, [plates]);
+       WHERE v.plate = ANY($1) AND r.date >= '2026-06-25' AND r.date <= '2026-09-05' AND r.fuel_type <> 'ADBLUE'`, [plates]);
     const byPlate = {};
     refuels.forEach(r => { (byPlate[r.plate] = byPlate[r.plate] || []).push(r); });
     const used = new Set();
@@ -406,6 +407,8 @@ router.get('/match-as24', async (req, res, next) => {
     }
     if (apply) { for (const m of matched.concat(looseM).concat(summed)) await pool.query('UPDATE refuels SET country=$1 WHERE id=$2', [m.t.country, m.r.id]); }
     const perC = {}; matched.concat(looseM).concat(summed).forEach(m => perC[m.t.country] = (perC[m.t.country] || 0) + 1);
+    const noC = refuels.filter(r => !used.has(r.id));
+    const noCHtml = noC.sort((a,b)=>a.plate.localeCompare(b.plate)||a.d.localeCompare(b.d)).map(r => `<tr><td>${r.plate}</td><td>${r.d}</td><td style="text-align:right">${r.liters} L</td><td>${r.country||'<span style=color:#e05a5a>brak</span>'}</td></tr>`).join('');
     const rowsHtml = matched.map(m => `<tr><td>${m.r.plate}</td><td>${m.t.date}</td><td style="text-align:right">${m.t.liters} L</td><td><b>${m.t.country}</b></td><td style="color:#888">#${m.r.id} (${m.r.d}, ${m.r.liters}L)</td></tr>`).join('');
     const looseHtml = looseM.map(m => `<tr><td>${m.r.plate}</td><td>${m.t.date}</td><td style="text-align:right">${m.t.liters} L</td><td><b>${m.t.country}</b></td><td style="color:#c8a24a">#${m.r.id} (${m.r.d}, ${m.r.liters}L) - litry sie roznia, sprawdz</td></tr>`).join('');
     const summedHtml = summed.map(m => `<tr><td>${m.r.plate}</td><td>${m.t.date}</td><td style="text-align:right">${m.t.liters} L (${m.t.parts} czesci)</td><td><b>${m.t.country}</b></td><td style="color:#888">#${m.r.id} (${m.r.d}, ${m.r.liters}L)</td></tr>`).join('');
@@ -417,7 +420,10 @@ AS24 transakcji: <b>${AS24.length}</b> | Pewne: <b>${matched.length}</b> | Luzne
 <h2>Dopasowane pewne (${matched.length})</h2><table><thead><tr><th>Auto</th><th>Data AS24</th><th>Litry</th><th>Kraj</th><th>Tankowanie w bazie</th></tr></thead><tbody>${rowsHtml}</tbody></table>
 <h2>Dopasowane luzniej - SPRAWDZ czy OK (${looseM.length})</h2><table><thead><tr><th>Auto</th><th>Data AS24</th><th>Litry AS24</th><th>Kraj</th><th>Tankowanie w bazie</th></tr></thead><tbody>${looseHtml}</tbody></table>
 <h2>Zsumowane (AS24 rozbil, program scalil) (${summed.length})</h2><table><thead><tr><th>Auto</th><th>Data AS24</th><th>Litry (suma)</th><th>Kraj</th><th>Tankowanie w bazie</th></tr></thead><tbody>${summedHtml}</tbody></table>
-<h2>Bez dopasowania (${unmatched.length})</h2><table><thead><tr><th>Auto</th><th>Data</th><th>Litry</th><th>Kraj</th></tr></thead><tbody>${unHtml}</tbody></table>`);
+<h2>Bez dopasowania AS24/Tankpool (${unmatched.length})</h2><table><thead><tr><th>Auto</th><th>Data</th><th>Litry</th><th>Kraj</th></tr></thead><tbody>${unHtml}</tbody></table>
+<div class="b" style="border-color:#3a2a2a"><b>ODWROTNY WIDOK - tankowania W PROGRAMIE (auta z kart, ostatnie 2 mies, bez AdBlue):</b><br>
+Razem w bazie: <b>${refuels.length}</b> | Dostaly kraj: <b>${refuels.length - noC.length}</b> | <b style="color:#e05a5a">BEZ kraju: ${noC.length}</b> (Citronex-PL albo niezeskanowane)</div>
+<h2>Tankowania w programie BEZ przypisanego kraju (${noC.length})</h2><table><thead><tr><th>Auto</th><th>Data</th><th>Litry</th><th>Kraj teraz</th></tr></thead><tbody>${noCHtml}</tbody></table>`);
   } catch (err) { next(err); }
 });
 
