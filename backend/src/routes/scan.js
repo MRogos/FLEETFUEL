@@ -382,7 +382,7 @@ router.get('/match-as24', async (req, res, next) => {
     const { rows: refuels } = await pool.query(
       `SELECT r.id, v.plate, TO_CHAR(r.date,'YYYY-MM-DD') AS d, r.liters::float AS liters, r.country
        FROM refuels r JOIN vehicles v ON v.id=r.vehicle_id
-       WHERE v.plate = ANY($1) AND r.date >= '2026-04-25' AND r.date <= '2026-09-05' AND r.fuel_type <> 'ADBLUE'`, [plates]);
+       WHERE v.plate = ANY($1) AND r.date >= '2026-06-28' AND r.date <= '2026-09-05' AND r.fuel_type <> 'ADBLUE'`, [plates]);
     const byPlate = {};
     refuels.forEach(r => { (byPlate[r.plate] = byPlate[r.plate] || []).push(r); });
     const used = new Set();
