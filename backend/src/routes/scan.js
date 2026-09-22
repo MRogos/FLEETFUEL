@@ -429,50 +429,5 @@ Razem w bazie: <b>${refuels.length}</b> | Dostaly kraj: <b>${refuels.length - no
 });
 
 
-// === PRZELICZANIE KWOT: wycena Kowalskiego (PL dzienny hurt Orlen+VAT, DE/GB miesiecznie) ===
-let PL_DAILY = {};
-try { PL_DAILY = require('../data/pl_daily.json'); } catch(e) { console.error('pl_daily.json brak:', e.message); }
-const FX_MONTHLY = { DE: { 7: 2.08, 8: 2.18 }, GB: { 7: 1.72, 8: 1.80 } };
-function plPriceOn(ds) { if (PL_DAILY[ds]) return PL_DAILY[ds]; const ks = Object.keys(PL_DAILY).sort(); let v = null; for (const k of ks) { if (k <= ds) v = PL_DAILY[k]; else break; } return v; }
-async function nbpRange(cur) { try { const res = await fetch(`https://api.nbp.pl/api/exchangerates/rates/a/${cur.toLowerCase()}/2026-06-25/2026-09-05/?format=json`); if (!res.ok) throw new Error('nbp'); const data = await res.json(); const m = {}; data.rates.forEach(r => m[r.effectiveDate] = parseFloat(r.mid)); return m; } catch (e) { return {}; } }
-function rateOn(map, ds, fb) { if (map[ds]) return map[ds]; const ks = Object.keys(map).sort(); let v = null; for (const k of ks) { if (k <= ds) v = map[k]; else break; } return v || fb; }
-router.get('/reprice', async (req, res, next) => {
-  try {
-    const apply = req.query.apply === '1';
-    const eurMap = await nbpRange('EUR'), gbpMap = await nbpRange('GBP');
-    const { rows } = await pool.query(
-      `SELECT r.id, v.plate, TO_CHAR(r.date,'YYYY-MM-DD') AS d, r.liters::float AS liters, r.price_per_l::float AS price, r.total::float AS total, r.country
-       FROM refuels r JOIN vehicles v ON v.id=r.vehicle_id
-       WHERE r.country IN ('PL','DE','GB') AND r.date >= '2026-07-01' AND r.date <= '2026-08-31' AND r.fuel_type <> 'ADBLUE'
-       ORDER BY v.plate, r.date`);
-    const out = []; let sumOld = 0, sumNew = 0; const perC = {};
-    for (const r of rows) {
-      const month = parseInt(r.d.slice(5, 7));
-      let unit = null, rate = 1, cur = 'PLN';
-      if (r.country === 'PL') { unit = plPriceOn(r.d); }
-      else { cur = r.country === 'DE' ? 'EUR' : 'GBP'; const fx = r.country === 'DE' ? eurMap : gbpMap; rate = rateOn(fx, r.d, cur === 'EUR' ? 4.30 : 5.05); const loc = (FX_MONTHLY[r.country] || {})[month]; unit = loc ? loc * rate : null; }
-      if (!unit || !r.liters) continue;
-      const newTotal = Math.round(unit * r.liters * 100) / 100;
-      const newPrice = Math.round(unit * 1000) / 1000;
-      const oldTotal = r.total || 0;
-      sumOld += oldTotal; sumNew += newTotal;
-      perC[r.country] = perC[r.country] || { old: 0, neu: 0, n: 0 };
-      perC[r.country].old += oldTotal; perC[r.country].neu += newTotal; perC[r.country].n++;
-      out.push({ id: r.id, plate: r.plate, d: r.d, liters: r.liters, country: r.country, oldTotal, newTotal, oldPrice: r.price, newPrice, cur, rate });
-      if (apply) { await pool.query('UPDATE refuels SET total_orig=COALESCE(total_orig,total), price_orig=COALESCE(price_orig,price_per_l), total=$1, price_per_l=$2 WHERE id=$3', [newTotal, newPrice, r.id]); }
-    }
-    const diff = Math.round((sumNew - sumOld) * 100) / 100;
-    const perCHtml = Object.entries(perC).map(([c, o]) => `<tr><td><b>${c}</b></td><td>${o.n}</td><td class="mono">${o.old.toFixed(2)}</td><td class="mono">${o.neu.toFixed(2)}</td><td class="mono" style="color:${o.neu>=o.old?'#5ad18a':'#e05a5a'}">${(o.neu-o.old>=0?'+':'')}${(o.neu-o.old).toFixed(2)}</td></tr>`).join('');
-    const rowsHtml = out.map(r => `<tr><td>${r.plate}</td><td>${r.d}</td><td><b>${r.country}</b></td><td class="mono">${r.liters} L</td><td class="mono" style="color:#888">${r.oldTotal.toFixed(2)}</td><td class="mono" style="color:#5ad18a">${r.newTotal.toFixed(2)}</td><td class="mono" style="color:#888">${r.cur==='PLN'?'hurt+VAT':(r.cur+' x'+r.rate.toFixed(4))}</td></tr>`).join('');
-    res.set('Content-Type', 'text/html; charset=utf-8').send(`<!doctype html><meta charset=utf-8><style>body{background:#0b0e0f;color:#dfe6e6;font-family:system-ui;padding:24px}table{border-collapse:collapse;font-size:12px;width:100%}td,th{padding:4px 8px;border-bottom:1px solid #1c2424;text-align:left}h1,h2{font-weight:700}.b{background:#111717;border:1px solid #1c2424;border-radius:8px;padding:12px 16px;margin:12px 0}</style>
-<h1>Przelicz kwoty -> cena Kowalskiego</h1>
-<div class="b">${apply ? '<b style="color:#5ad18a">ZAPISANO. Stare kwoty w total_orig (mozna cofnac).</b>' : '<b>PODGLAD (dry-run) - nic nie zapisano.</b> Zeby zapisac: dodaj <b>?apply=1</b> na koncu adresu.'}<br>
-Tankowan: <b>${out.length}</b> | Suma stara: <b>${sumOld.toFixed(2)} zl</b> | Suma nowa: <b>${sumNew.toFixed(2)} zl</b> | Roznica: <b style="color:${diff>=0?'#5ad18a':'#e05a5a'}">${diff>=0?'+':''}${diff.toFixed(2)} zl</b><br>
-<span style="font-size:11px;color:#888">PL = dzienny hurt Orlen ON x 1.23 VAT. DE/GB = miesieczna srednia detaliczna x kurs NBP z dnia. FR pominiete.</span></div>
-<h2>Podsumowanie per kraj</h2><table><thead><tr><th>Kraj</th><th>Ile</th><th>Stara suma</th><th>Nowa suma</th><th>Roznica</th></tr></thead><tbody>${perCHtml}</tbody></table>
-<h2>Szczegoly (${out.length})</h2><table><thead><tr><th>Auto</th><th>Data</th><th>Kraj</th><th>Litry</th><th>Stara kwota</th><th>Nowa kwota</th><th>Wycena</th></tr></thead><tbody>${rowsHtml}</tbody></table>`);
-  } catch (err) { next(err); }
-});
-
 module.exports = router;
 
