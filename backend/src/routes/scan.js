@@ -372,6 +372,7 @@ tr:hover td{background:#111717}.mono{font-variant-numeric:tabular-nums}
 let AS24 = [];
 try { AS24 = require('../data/as24.json'); } catch(e) { console.error('as24.json brak:', e.message); }
 try { AS24 = AS24.concat(require('../data/tankpool.json')); } catch(e) { console.error('tankpool.json brak:', e.message); }
+try { AS24 = AS24.concat(require('../data/citronex.json')); } catch(e) { console.error('citronex.json brak:', e.message); }
 function daysDiff(a, b) { return Math.abs((new Date(a).getTime() - new Date(b).getTime()) / 86400000); }
 router.get('/match-as24', async (req, res, next) => {
   try {
@@ -381,7 +382,7 @@ router.get('/match-as24', async (req, res, next) => {
     const { rows: refuels } = await pool.query(
       `SELECT r.id, v.plate, TO_CHAR(r.date,'YYYY-MM-DD') AS d, r.liters::float AS liters, r.country
        FROM refuels r JOIN vehicles v ON v.id=r.vehicle_id
-       WHERE v.plate = ANY($1) AND r.date >= '2026-06-25' AND r.date <= '2026-09-05' AND r.fuel_type <> 'ADBLUE'`, [plates]);
+       WHERE v.plate = ANY($1) AND r.date >= '2026-04-25' AND r.date <= '2026-09-05' AND r.fuel_type <> 'ADBLUE'`, [plates]);
     const byPlate = {};
     refuels.forEach(r => { (byPlate[r.plate] = byPlate[r.plate] || []).push(r); });
     const used = new Set();
