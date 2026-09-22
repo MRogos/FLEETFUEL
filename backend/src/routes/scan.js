@@ -383,22 +383,26 @@ router.get('/match-as24', async (req, res, next) => {
        WHERE v.plate = ANY($1) AND r.date >= '2026-06-25' AND r.date <= '2026-09-05'`, [plates]);
     const byPlate = {};
     refuels.forEach(r => { (byPlate[r.plate] = byPlate[r.plate] || []).push(r); });
-    const used = new Set(); const matched = []; const unmatched = [];
+    const used = new Set(); const matched = []; const looseM = []; const unmatched = [];
     for (const t of AS24) {
-      const cands = (byPlate[t.plate] || []).filter(r => !used.has(r.id) && Math.abs(r.liters - t.liters) <= 0.6);
-      cands.sort((a, b) => daysDiff(a.d, t.date) - daysDiff(b.d, t.date) || Math.abs(a.liters - t.liters) - Math.abs(b.liters - t.liters));
-      const best = cands.find(r => daysDiff(r.d, t.date) <= 4);
-      if (best) { used.add(best.id); matched.push({ t, r: best }); } else unmatched.push(t);
+      const same = (byPlate[t.plate] || []).filter(r => !used.has(r.id));
+      let best = same.filter(r => Math.abs(r.liters - t.liters) <= 0.6 && daysDiff(r.d, t.date) <= 4).sort((a, b) => daysDiff(a.d, t.date) - daysDiff(b.d, t.date))[0];
+      if (best) { used.add(best.id); matched.push({ t, r: best }); continue; }
+      let loose = same.filter(r => daysDiff(r.d, t.date) <= 2 && Math.abs(r.liters - t.liters) <= 5).sort((a, b) => (daysDiff(a.d, t.date) + Math.abs(a.liters - t.liters) / 5) - (daysDiff(b.d, t.date) + Math.abs(b.liters - t.liters) / 5))[0];
+      if (loose) { used.add(loose.id); looseM.push({ t, r: loose }); continue; }
+      unmatched.push(t);
     }
-    if (apply) { for (const m of matched) await pool.query('UPDATE refuels SET country=$1 WHERE id=$2', [m.t.country, m.r.id]); }
-    const perC = {}; matched.forEach(m => perC[m.t.country] = (perC[m.t.country] || 0) + 1);
+    if (apply) { for (const m of matched.concat(looseM)) await pool.query('UPDATE refuels SET country=$1 WHERE id=$2', [m.t.country, m.r.id]); }
+    const perC = {}; matched.concat(looseM).forEach(m => perC[m.t.country] = (perC[m.t.country] || 0) + 1);
     const rowsHtml = matched.map(m => `<tr><td>${m.r.plate}</td><td>${m.t.date}</td><td style="text-align:right">${m.t.liters} L</td><td><b>${m.t.country}</b></td><td style="color:#888">#${m.r.id} (${m.r.d}, ${m.r.liters}L)</td></tr>`).join('');
+    const looseHtml = looseM.map(m => `<tr><td>${m.r.plate}</td><td>${m.t.date}</td><td style="text-align:right">${m.t.liters} L</td><td><b>${m.t.country}</b></td><td style="color:#c8a24a">#${m.r.id} (${m.r.d}, ${m.r.liters}L) - litry sie roznia, sprawdz</td></tr>`).join('');
     const unHtml = unmatched.map(t => `<tr><td>${t.plate}</td><td>${t.date}</td><td style="text-align:right">${t.liters} L</td><td>${t.country}</td></tr>`).join('');
     res.set('Content-Type','text/html; charset=utf-8').send(`<!doctype html><meta charset=utf-8><style>body{background:#0b0e0f;color:#dfe6e6;font-family:system-ui;padding:24px}table{border-collapse:collapse;font-size:12px;width:100%}td,th{padding:4px 8px;border-bottom:1px solid #1c2424;text-align:left}h1,h2{font-weight:700}.b{background:#111717;border:1px solid #1c2424;border-radius:8px;padding:12px 16px;margin:12px 0}</style>
 <h1>Dopasowanie AS24 -> kraj tankowan</h1>
 <div class="b">${apply ? '<b style="color:#5ad18a">ZAPISANO do bazy.</b>' : '<b>PODGLAD (dry-run) - nic nie zapisano.</b> Zeby zapisac: dodaj <b>?apply=1</b> na koncu adresu.'}<br>
-AS24 transakcji: <b>${AS24.length}</b> | Dopasowano: <b>${matched.length}</b> (${Object.entries(perC).map(([c,n])=>c+':'+n).join(', ')||'-'}) | Bez dopasowania: <b>${unmatched.length}</b></div>
-<h2>Dopasowane (${matched.length})</h2><table><thead><tr><th>Auto</th><th>Data AS24</th><th>Litry</th><th>Kraj</th><th>Tankowanie w bazie</th></tr></thead><tbody>${rowsHtml}</tbody></table>
+AS24 transakcji: <b>${AS24.length}</b> | Pewne: <b>${matched.length}</b> | Luzne: <b>${looseM.length}</b> | Razem: <b>${matched.length+looseM.length}</b> (${Object.entries(perC).map(([c,n])=>c+':'+n).join(', ')||'-'}) | Bez: <b>${unmatched.length}</b></div>
+<h2>Dopasowane pewne (${matched.length})</h2><table><thead><tr><th>Auto</th><th>Data AS24</th><th>Litry</th><th>Kraj</th><th>Tankowanie w bazie</th></tr></thead><tbody>${rowsHtml}</tbody></table>
+<h2>Dopasowane luzniej - SPRAWDZ czy OK (${looseM.length})</h2><table><thead><tr><th>Auto</th><th>Data AS24</th><th>Litry AS24</th><th>Kraj</th><th>Tankowanie w bazie</th></tr></thead><tbody>${looseHtml}</tbody></table>
 <h2>Bez dopasowania (${unmatched.length})</h2><table><thead><tr><th>Auto</th><th>Data</th><th>Litry</th><th>Kraj</th></tr></thead><tbody>${unHtml}</tbody></table>`);
   } catch (err) { next(err); }
 });
