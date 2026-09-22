@@ -704,6 +704,7 @@ function calcRefuel(edited){
 $('r-liters').addEventListener('input',()=>calcRefuel('liters'));
 $('r-price').addEventListener('input',()=>calcRefuel('price'));
 $('r-total').addEventListener('input',()=>calcRefuel('total'));
+$('r-country').addEventListener('change',async function(){ const c=this.value; if(!c){return;} try{ const prices=await api('GET','/scan/prices'); const p=prices.find(x=>x.country===c); if(p&&p.price_pln){ $('r-price').value=p.price_pln; calcRefuel('price'); showToast('Cena '+c+' (Kowalski): '+p.price_pln+' zl/L'); } }catch(e){} });
 
 /* ─── EXPORT CSV ─── */
 async function exportCSV() {
