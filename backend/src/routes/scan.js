@@ -386,9 +386,9 @@ router.get('/match-as24', async (req, res, next) => {
     const used = new Set(); const matched = []; const looseM = []; const unmatched = [];
     for (const t of AS24) {
       const same = (byPlate[t.plate] || []).filter(r => !used.has(r.id));
-      let best = same.filter(r => Math.abs(r.liters - t.liters) <= 0.6 && daysDiff(r.d, t.date) <= 4).sort((a, b) => daysDiff(a.d, t.date) - daysDiff(b.d, t.date))[0];
+      let best = same.filter(r => Math.abs(r.liters - t.liters) <= 0.6 && daysDiff(r.d, t.date) <= 10).sort((a, b) => daysDiff(a.d, t.date) - daysDiff(b.d, t.date))[0];
       if (best) { used.add(best.id); matched.push({ t, r: best }); continue; }
-      let loose = same.filter(r => daysDiff(r.d, t.date) <= 2 && Math.abs(r.liters - t.liters) <= 5).sort((a, b) => (daysDiff(a.d, t.date) + Math.abs(a.liters - t.liters) / 5) - (daysDiff(b.d, t.date) + Math.abs(b.liters - t.liters) / 5))[0];
+      let loose = same.filter(r => daysDiff(r.d, t.date) <= 5 && Math.abs(r.liters - t.liters) <= 5).sort((a, b) => (daysDiff(a.d, t.date) + Math.abs(a.liters - t.liters) / 5) - (daysDiff(b.d, t.date) + Math.abs(b.liters - t.liters) / 5))[0];
       if (loose) { used.add(loose.id); looseM.push({ t, r: loose }); continue; }
       unmatched.push(t);
     }
