@@ -383,26 +383,27 @@ router.get('/match-as24', async (req, res, next) => {
        WHERE v.plate = ANY($1) AND r.date >= '2026-06-25' AND r.date <= '2026-09-05'`, [plates]);
     const byPlate = {};
     refuels.forEach(r => { (byPlate[r.plate] = byPlate[r.plate] || []).push(r); });
-    const used = new Set(); const matched = []; const looseM = []; const unmatched = [];
+    const used = new Set();
+    const matched = []; const rest1 = [];
     for (const t of AS24) {
-      const same = (byPlate[t.plate] || []).filter(r => !used.has(r.id));
-      let best = same.filter(r => Math.abs(r.liters - t.liters) <= 0.6 && daysDiff(r.d, t.date) <= 10).sort((a, b) => daysDiff(a.d, t.date) - daysDiff(b.d, t.date))[0];
-      if (best) { used.add(best.id); matched.push({ t, r: best }); continue; }
-      let loose = same.filter(r => daysDiff(r.d, t.date) <= 5 && Math.abs(r.liters - t.liters) <= 5).sort((a, b) => (daysDiff(a.d, t.date) + Math.abs(a.liters - t.liters) / 5) - (daysDiff(b.d, t.date) + Math.abs(b.liters - t.liters) / 5))[0];
-      if (loose) { used.add(loose.id); looseM.push({ t, r: loose }); continue; }
-      unmatched.push(t);
+      const best = (byPlate[t.plate] || []).filter(r => !used.has(r.id) && Math.abs(r.liters - t.liters) <= 0.6 && daysDiff(r.d, t.date) <= 10).sort((a, b) => daysDiff(a.d, t.date) - daysDiff(b.d, t.date))[0];
+      if (best) { used.add(best.id); matched.push({ t, r: best }); } else rest1.push(t);
     }
-    const summed = []; const stillUn = []; const grp = {};
-    unmatched.forEach(t => { const k = t.plate + '|' + t.date + '|' + t.country; (grp[k] = grp[k] || []).push(t); });
+    const summed = []; const rest2 = []; const grp = {};
+    rest1.forEach(t => { const k = t.plate + '|' + t.date + '|' + t.country; (grp[k] = grp[k] || []).push(t); });
     for (const k of Object.keys(grp)) {
       const g = grp[k];
-      if (g.length < 2) { stillUn.push(...g); continue; }
+      if (g.length < 2) { rest2.push(...g); continue; }
       const sumL = Math.round(g.reduce((a, t) => a + t.liters, 0) * 100) / 100;
-      const cand = (byPlate[g[0].plate] || []).filter(r => !used.has(r.id) && Math.abs(r.liters - sumL) <= 1 && daysDiff(r.d, g[0].date) <= 10).sort((a, b) => daysDiff(a.d, g[0].date) - daysDiff(b.d, g[0].date))[0];
+      const cand = (byPlate[g[0].plate] || []).filter(r => !used.has(r.id) && Math.abs(r.liters - sumL) <= 1.5 && daysDiff(r.d, g[0].date) <= 10).sort((a, b) => daysDiff(a.d, g[0].date) - daysDiff(b.d, g[0].date))[0];
       if (cand) { used.add(cand.id); summed.push({ t: { plate: g[0].plate, date: g[0].date, country: g[0].country, liters: sumL, parts: g.length }, r: cand }); }
-      else stillUn.push(...g);
+      else rest2.push(...g);
     }
-    unmatched.length = 0; unmatched.push(...stillUn);
+    const looseM = []; const unmatched = [];
+    for (const t of rest2) {
+      const loose = (byPlate[t.plate] || []).filter(r => !used.has(r.id) && daysDiff(r.d, t.date) <= 5 && Math.abs(r.liters - t.liters) <= 5).sort((a, b) => (daysDiff(a.d, t.date) + Math.abs(a.liters - t.liters) / 5) - (daysDiff(b.d, t.date) + Math.abs(b.liters - t.liters) / 5))[0];
+      if (loose) { used.add(loose.id); looseM.push({ t, r: loose }); } else unmatched.push(t);
+    }
     if (apply) { for (const m of matched.concat(looseM).concat(summed)) await pool.query('UPDATE refuels SET country=$1 WHERE id=$2', [m.t.country, m.r.id]); }
     const perC = {}; matched.concat(looseM).concat(summed).forEach(m => perC[m.t.country] = (perC[m.t.country] || 0) + 1);
     const rowsHtml = matched.map(m => `<tr><td>${m.r.plate}</td><td>${m.t.date}</td><td style="text-align:right">${m.t.liters} L</td><td><b>${m.t.country}</b></td><td style="color:#888">#${m.r.id} (${m.r.d}, ${m.r.liters}L)</td></tr>`).join('');
